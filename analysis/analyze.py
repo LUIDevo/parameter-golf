@@ -3,6 +3,8 @@
 
 Usage:
     python analysis/analyze.py summary                     # Table of all runs
+    python analysis/analyze.py overfit                     # Overfitting check (all runs)
+    python analysis/analyze.py overfit run_id              # Overfitting check (single run)
     python analysis/analyze.py compare run1 run2           # Diff two runs
     python analysis/analyze.py plot loss                   # Loss curves
     python analysis/analyze.py plot bpb                    # BPB bar chart
@@ -51,7 +53,142 @@ def fmt_time(ms: float | None) -> str:
     return f"{ms / 60_000:.1f}min"
 
 
-def cmd_summary(runs: list[RunResult]) -> None:
+def _overfit_diagnosis(run: RunResult) -> dict | None:
+    """Compute overfitting metrics for a single run.
+
+    Returns a dict with:
+      - train_losses / val_losses: aligned lists at validation steps
+      - gap_start / gap_end: train-val gap at first and last validation point
+      - gap_trend: positive means the gap is widening (overfitting signal)
+      - val_turning_step: step where val loss first increases (None if always decreasing)
+      - verdict: "ok", "mild", or "overfitting"
+    """
+    # Build aligned (step -> train_loss, val_loss) pairs.
+    # train_loss is logged more often, so interpolate: use the most recent
+    # train_loss logged at or before each validation step.
+    train_by_step = {}
+    for s in run.steps:
+        if s.train_loss is not None:
+            train_by_step[s.step] = s.train_loss
+    val_points = [(s.step, s.val_loss) for s in run.steps if s.val_loss is not None]
+
+    if len(val_points) < 2 or not train_by_step:
+        return None
+
+    sorted_train_steps = sorted(train_by_step.keys())
+
+    aligned = []  # (step, train_loss, val_loss)
+    for v_step, v_loss in val_points:
+        # Find most recent train_loss at or before this val step
+        tl = None
+        for ts in reversed(sorted_train_steps):
+            if ts <= v_step:
+                tl = train_by_step[ts]
+                break
+        if tl is None:
+            # Use the earliest train_loss if val is logged before any train
+            tl = train_by_step[sorted_train_steps[0]]
+        aligned.append((v_step, tl, v_loss))
+
+    steps = [a[0] for a in aligned]
+    train_losses = [a[1] for a in aligned]
+    val_losses = [a[2] for a in aligned]
+    gaps = [v - t for t, v in zip(train_losses, val_losses)]
+
+    gap_start = gaps[0]
+    gap_end = gaps[-1]
+    gap_trend = gap_end - gap_start
+
+    # Detect where val loss first turns upward
+    val_turning_step = None
+    min_val = val_losses[0]
+    for i in range(1, len(val_losses)):
+        if val_losses[i] < min_val:
+            min_val = val_losses[i]
+        elif val_losses[i] > min_val and val_turning_step is None:
+            val_turning_step = steps[i]
+
+    # Verdict
+    if val_turning_step is not None and gap_trend > 0.05:
+        verdict = "overfitting"
+    elif gap_trend > 0.02 or val_turning_step is not None:
+        verdict = "mild"
+    else:
+        verdict = "ok"
+
+    return {
+        "steps": steps,
+        "train_losses": train_losses,
+        "val_losses": val_losses,
+        "gaps": gaps,
+        "gap_start": gap_start,
+        "gap_end": gap_end,
+        "gap_trend": gap_trend,
+        "val_turning_step": val_turning_step,
+        "verdict": verdict,
+    }
+
+
+def cmd_overfit(runs: list[RunResult], run_id: str | None) -> None:
+    if run_id:
+        targets = [r for r in runs if r.run_id == run_id]
+        if not targets:
+            print(f"Run '{run_id}' not found")
+            return
+    else:
+        targets = runs
+
+    results = []
+    for run in targets:
+        diag = _overfit_diagnosis(run)
+        if diag is None:
+            print(f"{run.run_id}: not enough data (need >= 2 val checkpoints)")
+            continue
+        results.append((run, diag))
+
+    if not results:
+        return
+
+    # Print table
+    header = f"{'Run ID':<25} {'Verdict':>11} {'Gap Start':>10} {'Gap End':>10} {'Gap Trend':>10} {'Val Turn':>10}"
+    print(header)
+    print("-" * len(header))
+    for run, d in results:
+        turn = str(d["val_turning_step"]) if d["val_turning_step"] else "--"
+        tag = {"ok": "OK", "mild": "MILD", "overfitting": "OVERFIT"}[d["verdict"]]
+        print(
+            f"{run.run_id:<25} "
+            f"{tag:>11} "
+            f"{d['gap_start']:>10.4f} "
+            f"{d['gap_end']:>10.4f} "
+            f"{d['gap_trend']:>+10.4f} "
+            f"{turn:>10}"
+        )
+
+    # Detailed per-step breakdown for single-run mode
+    if len(results) == 1:
+        run, d = results[0]
+        print(f"\n-- Per-checkpoint detail for {run.run_id} --")
+        print(f"{'Step':>8} {'Train Loss':>12} {'Val Loss':>12} {'Gap':>10}")
+        for step, tl, vl, g in zip(d["steps"], d["train_losses"], d["val_losses"], d["gaps"]):
+            print(f"{step:>8} {tl:>12.4f} {vl:>12.4f} {g:>+10.4f}")
+
+        print(f"\nDiagnosis: ", end="")
+        if d["verdict"] == "ok":
+            print("No overfitting detected. Train-val gap is stable.")
+        elif d["verdict"] == "mild":
+            print("Mild overfitting signal. Gap is widening slightly or val loss bumped up once.")
+            if d["val_turning_step"]:
+                print(f"  Val loss first increased at step {d['val_turning_step']}.")
+        else:
+            print("Overfitting detected. Val loss is rising while train loss drops.")
+            print(f"  Val loss first increased at step {d['val_turning_step']}.")
+            print(f"  Train-val gap grew by {d['gap_trend']:+.4f} over training.")
+            print("  Consider: fewer iterations, more regularization, or smaller model.")
+
+
+
+
     if not runs:
         print("No log files found in logs/")
         return
@@ -266,6 +403,9 @@ def main() -> None:
 
     sub.add_parser("summary", help="Show summary table of all runs")
 
+    p_overfit = sub.add_parser("overfit", help="Overfitting diagnostic for one or all runs")
+    p_overfit.add_argument("run_id", nargs="?", help="Run ID (omit for all runs)")
+
     p_cmp = sub.add_parser("compare", help="Compare two runs")
     p_cmp.add_argument("run1", help="First run ID")
     p_cmp.add_argument("run2", help="Second run ID")
@@ -302,6 +442,8 @@ def main() -> None:
 
     if args.command == "summary":
         cmd_summary(runs)
+    elif args.command == "overfit":
+        cmd_overfit(runs, getattr(args, "run_id", None))
     elif args.command == "compare":
         cmd_compare(runs, args.run1, args.run2)
     elif args.command == "detail":

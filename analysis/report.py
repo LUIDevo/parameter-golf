@@ -12,25 +12,38 @@ import matplotlib.pyplot as plt
 
 from parse_logs import RunResult
 
-PALETTE = ["#6abf6a", "#dd8452", "#7a9ec7", "#c44e52", "#b08cd6", "#d4a853", "#da8bc3"]
-BG = "#1a1a2e"
-FG = "#e0e0e0"
-GRID = "#2a2a40"
+# Palette inspired by the reference image — vivid neon on dark
+NEON_GREEN = "#33ff88"
+NEON_CYAN = "#00ccff"
+NEON_BLUE = "#5577ff"
+NEON_RED = "#ff4466"
+NEON_PURPLE = "#bb77ff"
+NEON_WHITE = "#e8e8f0"
+NEON_PINK = "#ff66aa"
+PALETTE = [NEON_GREEN, NEON_CYAN, NEON_BLUE, NEON_RED, NEON_PURPLE, NEON_WHITE, NEON_PINK]
+
+BG = "#1a1b2e"
+BG_CARD = "#1e2035"
+GRID = "#2d2a4a"
+BORDER = "#3a3660"
+TEXT = "#d0d0e0"
+TEXT_DIM = "#7a7a9a"
 
 
 def _apply_style():
     plt.rcParams.update({
         "figure.facecolor": BG,
         "axes.facecolor": BG,
-        "axes.edgecolor": "#3a3a50",
-        "axes.labelcolor": FG,
-        "text.color": FG,
-        "xtick.color": "#9090a0",
-        "ytick.color": "#9090a0",
+        "axes.edgecolor": BORDER,
+        "axes.labelcolor": TEXT,
+        "text.color": TEXT,
+        "xtick.color": TEXT_DIM,
+        "ytick.color": TEXT_DIM,
         "grid.color": GRID,
-        "legend.facecolor": "#20203a",
-        "legend.edgecolor": "#3a3a50",
-        "legend.labelcolor": FG,
+        "legend.facecolor": BG_CARD,
+        "legend.edgecolor": BORDER,
+        "legend.labelcolor": TEXT,
+        "font.family": "sans-serif",
         "font.size": 10,
     })
 
@@ -52,16 +65,16 @@ def _make_loss_chart(runs: list[RunResult], metric: str) -> str | None:
         if pts:
             x, y = zip(*pts)
             ax.plot(x, y, label=run.run_id, color=PALETTE[i % len(PALETTE)],
-                    marker="." if len(pts) < 50 else None, linewidth=1.5)
+                    marker="." if len(pts) < 50 else None, linewidth=2)
             any_data = True
     if not any_data:
         plt.close(fig)
         return None
     ax.set_xlabel("Step", fontsize=9)
     ax.set_ylabel(metric.replace("_", " ").title(), fontsize=9)
-    ax.set_title(metric.replace("_", " ").title(), fontsize=11, loc="left")
+    ax.set_title(metric.replace("_", " ").title(), fontsize=11, loc="left", color=NEON_WHITE)
     ax.legend(fontsize=7)
-    ax.grid(True, alpha=0.2)
+    ax.grid(True, alpha=0.3, linestyle="-")
     return _fig_to_base64(fig)
 
 
@@ -73,13 +86,15 @@ def _make_bpb_chart(runs: list[RunResult]) -> str | None:
     data.sort(key=lambda x: x[1])
     labels, bpbs = zip(*data)
     fig, ax = plt.subplots(figsize=(max(5, len(labels) * 0.6), 3.2))
-    bars = ax.bar(labels, bpbs, color="#7a9ec7", edgecolor="#3a3a50", linewidth=0.5)
+    colors = [PALETTE[i % len(PALETTE)] for i in range(len(labels))]
+    bars = ax.bar(labels, bpbs, color=colors, edgecolor=BORDER, linewidth=0.5, alpha=0.9)
     for bar, bpb in zip(bars, bpbs):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.005,
-                f"{bpb:.4f}", ha="center", va="bottom", fontsize=8)
+                f"{bpb:.4f}", ha="center", va="bottom", fontsize=8, color=NEON_WHITE)
     ax.set_ylabel("BPB", fontsize=9)
-    ax.set_title("BPB Comparison", fontsize=11, loc="left")
+    ax.set_title("BPB Comparison", fontsize=11, loc="left", color=NEON_WHITE)
     ax.tick_params(axis="x", rotation=45, labelsize=8)
+    ax.grid(True, alpha=0.2, axis="y")
     return _fig_to_base64(fig)
 
 
@@ -90,20 +105,23 @@ def _make_memory_chart(runs: list[RunResult]) -> str | None:
         return None
     labels = [d[0] for d in data]
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.2))
-    ax1.bar(labels, [d[1] for d in data], color="#dd8452", edgecolor="#3a3a50", linewidth=0.5)
-    ax1.axhline(y=81920, color="#c44e52", linestyle="--", alpha=0.6, label="H100 80GB")
+    ax1.bar(labels, [d[1] for d in data], color=NEON_CYAN, edgecolor=BORDER, linewidth=0.5, alpha=0.85)
+    ax1.axhline(y=81920, color=NEON_RED, linestyle="--", alpha=0.7, label="H100 80GB")
     ax1.set_ylabel("VRAM (MiB)", fontsize=9)
-    ax1.set_title("VRAM Usage", fontsize=11, loc="left")
+    ax1.set_title("VRAM Usage", fontsize=11, loc="left", color=NEON_WHITE)
     ax1.tick_params(axis="x", rotation=45, labelsize=8)
     ax1.legend(fontsize=7)
+    ax1.grid(True, alpha=0.2, axis="y")
     sized = [(d[0], d[2] / 1024 / 1024) for d in data if d[2]]
     if sized:
-        ax2.bar([s[0] for s in sized], [s[1] for s in sized], color="#6abf6a", edgecolor="#3a3a50", linewidth=0.5)
-        ax2.axhline(y=16, color="#c44e52", linestyle="--", alpha=0.6, label="16MB Cap")
+        ax2.bar([s[0] for s in sized], [s[1] for s in sized],
+                color=NEON_GREEN, edgecolor=BORDER, linewidth=0.5, alpha=0.85)
+        ax2.axhline(y=16, color=NEON_RED, linestyle="--", alpha=0.7, label="16MB Cap")
         ax2.set_ylabel("Size (MB)", fontsize=9)
-        ax2.set_title("Submission Size", fontsize=11, loc="left")
+        ax2.set_title("Submission Size", fontsize=11, loc="left", color=NEON_WHITE)
         ax2.tick_params(axis="x", rotation=45, labelsize=8)
         ax2.legend(fontsize=7)
+        ax2.grid(True, alpha=0.2, axis="y")
     return _fig_to_base64(fig)
 
 
@@ -127,13 +145,14 @@ def generate_report(runs: list[RunResult], output: Path) -> None:
     runs_sorted = sorted(runs, key=lambda r: r.int8_val_bpb or r.final_val_bpb or 999)
 
     rows = ""
-    for r in runs_sorted:
+    for i, r in enumerate(runs_sorted):
         last_step = r.steps[-1].step if r.steps else 0
         bpb = r.int8_val_bpb or r.final_val_bpb
         is_best = r == runs_sorted[0] if runs_sorted else False
         cls = ' class="best"' if is_best else ""
+        color = PALETTE[i % len(PALETTE)]
         rows += f"""<tr{cls}>
-            <td>{r.run_id}</td>
+            <td><span class="run-dot" style="background:{color}"></span>{r.run_id}</td>
             <td>{_fmt(bpb, 'bpb')}</td>
             <td>{_fmt(r.final_val_loss, 'bpb')}</td>
             <td>{_fmt(r.model_params, 'int')}</td>
@@ -144,7 +163,8 @@ def generate_report(runs: list[RunResult], output: Path) -> None:
         </tr>\n"""
 
     details = ""
-    for r in runs_sorted:
+    for i, r in enumerate(runs_sorted):
+        color = PALETTE[i % len(PALETTE)]
         hp_rows = ""
         for attr, label in [
             ("model_params", "Parameters"), ("num_heads", "Heads"), ("num_kv_heads", "KV Heads"),
@@ -171,8 +191,8 @@ def generate_report(runs: list[RunResult], output: Path) -> None:
             </tr>\n"""
 
         details += f"""
-        <div class="run-detail" id="detail-{r.run_id}">
-            <h3>{r.run_id}</h3>
+        <div class="run-detail" id="detail-{r.run_id}" style="border-left: 3px solid {color}">
+            <h3><span class="run-dot" style="background:{color}"></span>{r.run_id}</h3>
             <div class="detail-grid">
                 <div>
                     <h4>Hyperparameters</h4>
@@ -215,114 +235,126 @@ def generate_report(runs: list[RunResult], output: Path) -> None:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Parameter Golf - Run Analysis</title>
+<title>Parameter Golf</title>
 <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
     body {{
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-        background: #1a1a2e;
-        color: #e0e0e0;
-        padding: 24px 32px;
+        background: {BG};
+        color: {TEXT};
+        padding: 28px 32px;
         line-height: 1.6;
         font-size: 14px;
         max-width: 1200px;
         margin: 0 auto;
     }}
     h1 {{
-        font-size: 24px;
+        font-size: 26px;
         font-weight: 700;
         margin-bottom: 2px;
-        color: #f0f0f0;
+        color: {NEON_WHITE};
+        letter-spacing: -0.5px;
     }}
     h2 {{
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 600;
-        color: #c0c0c0;
-        margin: 32px 0 12px;
-        padding-bottom: 6px;
-        border-bottom: 2px solid #2a2a40;
+        color: {TEXT_DIM};
+        margin: 36px 0 14px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid {BORDER};
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
     }}
     h3 {{
         font-size: 14px;
         font-weight: 600;
-        color: #e8e8e8;
-        margin-bottom: 8px;
+        color: {NEON_WHITE};
+        margin-bottom: 10px;
     }}
     h4 {{
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
-        color: #9090a0;
+        color: {TEXT_DIM};
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 6px;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
     }}
     .subtitle {{
-        color: #808090;
+        color: {TEXT_DIM};
         font-size: 13px;
-        margin-bottom: 24px;
+        margin-bottom: 28px;
+    }}
+    .run-dot {{
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 8px;
+        vertical-align: middle;
     }}
 
     table {{ border-collapse: collapse; width: 100%; margin-bottom: 14px; }}
     th, td {{
-        padding: 8px 12px;
+        padding: 9px 14px;
         text-align: left;
-        border-bottom: 1px solid #2a2a40;
+        border-bottom: 1px solid {GRID};
         font-size: 13px;
     }}
     th {{
-        background: #22223a;
-        color: #9090a0;
+        background: {BG_CARD};
+        color: {TEXT_DIM};
         font-weight: 600;
-        font-size: 11px;
+        font-size: 10px;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 1px;
         position: sticky;
         top: 0;
     }}
     td {{ font-variant-numeric: tabular-nums; }}
-    tr:hover {{ background: #22223a; }}
-    tr.best {{ background: #1e2e1e; }}
-    tr.best td:nth-child(2) {{ color: #6abf6a; font-weight: 700; }}
+    tr:hover {{ background: {BG_CARD}; }}
+    tr.best {{ background: rgba(51, 255, 136, 0.06); }}
+    tr.best td:nth-child(2) {{ color: {NEON_GREEN}; font-weight: 700; }}
 
     .charts-grid {{
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 16px;
-        margin: 16px 0;
+        gap: 14px;
+        margin: 14px 0;
     }}
     .chart {{
-        border: 1px solid #2a2a40;
-        border-radius: 6px;
-        padding: 8px;
-        background: #20203a;
+        border: 1px solid {BORDER};
+        border-radius: 8px;
+        padding: 6px;
+        background: {BG_CARD};
     }}
     .chart img {{
         width: 100%;
-        border-radius: 4px;
+        border-radius: 6px;
         display: block;
     }}
 
     .run-detail {{
-        background: #20203a;
-        border: 1px solid #2a2a40;
-        border-radius: 6px;
+        background: {BG_CARD};
+        border: 1px solid {BORDER};
+        border-radius: 8px;
         padding: 18px;
         margin: 12px 0;
     }}
     .detail-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }}
-    .detail-table td:first-child {{ color: #808090; }}
+    .detail-table td:first-child {{ color: {TEXT_DIM}; }}
     .step-table {{ font-size: 12px; }}
+    .step-table td {{ color: {TEXT}cc; }}
     details {{ margin-top: 12px; }}
     summary {{
         cursor: pointer;
-        color: #7a9ec7;
+        color: {NEON_CYAN};
         padding: 6px 0;
         font-size: 13px;
     }}
-    summary:hover {{ color: #a0c4e8; }}
+    summary:hover {{ color: {NEON_GREEN}; }}
 
     .footer {{
-        color: #3a3a50;
+        color: {GRID};
         margin-top: 48px;
         text-align: center;
         font-size: 12px;
