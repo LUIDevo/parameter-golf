@@ -32,7 +32,9 @@ TEXT_DIM = "#7a7a9a"
 
 # Update this dict manually when you add a new run.
 ABLATION_NOTES: dict[str, str] = {
-    "smoke_005": "baseline",
+    "smoke_003": "MODEL_DIM=544 NUM_LAYERS=12, 100 iters only",
+    "smoke_004": "MODEL_DIM=544 NUM_LAYERS=12, 500 iters",
+    "smoke_005": "baseline (default config, 1000 iters)",
     "smoke_006": "TRAIN_BATCH_TOKENS 524k→1048k, ITERS 1000→500",
     "smoke_007": "NUM_LAYERS=14 MODEL_DIM=352",
     "smoke_008": "TRAIN_SEQ_LEN=2048 NUM_LAYERS=18 MODEL_DIM=352",
@@ -231,9 +233,16 @@ def _fit_power_law(run: RunResult) -> tuple[float, float] | None:
     """Fit L(t) = a * t^b + 1.0 to val_bpb checkpoints via log-linear regression.
 
     Returns (a, b) or None if there is not enough data or the fit fails.
+    When fewer than 3 val checkpoints exist at step > 0, the step-0
+    initialization checkpoint is included (mapped to step=1) so that runs
+    with sparse validation logging can still produce an extrapolation.
     """
     pts = [(s.step, s.val_bpb) for s in run.steps if s.val_bpb is not None and s.step > 0]
     if len(pts) < 3:
+        # Include step-0 init checkpoint mapped to step=1 for sparse runs
+        init = [(1, s.val_bpb) for s in run.steps if s.val_bpb is not None and s.step == 0]
+        pts = init + pts
+    if len(pts) < 2:
         return None
     steps_arr = np.array([p[0] for p in pts], dtype=float)
     bpbs_arr = np.array([p[1] for p in pts], dtype=float)
@@ -593,7 +602,54 @@ def generate_report(runs: list[RunResult], output: Path) -> None:
     </table>
     """
 
-    # --- Section 4 (Speed Efficiency bar chart) ---
+    # --- Section 4: Learning velocity (derivative) ---
+    deriv_rows = ""
+    for i, r in enumerate(runs_sorted):
+        color = PALETTE[i % len(PALETTE)]
+        params = _fit_power_law(r)
+        if params is None:
+            deriv_rows += f"""<tr>
+                <td><span class="run-dot" style="background:{color}"></span>{r.run_id}</td>
+                <td colspan="4" class="dim">insufficient data</td>
+            </tr>\n"""
+            continue
+        a, b = params
+        last_step = max((s.step for s in r.steps if s.val_bpb is not None and s.step > 0), default=0)
+        if last_step == 0:
+            deriv_rows += f"""<tr>
+                <td><span class="run-dot" style="background:{color}"></span>{r.run_id}</td>
+                <td colspan="4" class="dim">no val steps</td>
+            </tr>\n"""
+            continue
+        deriv = a * b * (last_step ** (b - 1))
+        drop_per_1k = deriv * 1000
+        # Color: more negative = greener (more headroom)
+        if drop_per_1k < -0.5:
+            d_color = NEON_GREEN
+        elif drop_per_1k < -0.1:
+            d_color = NEON_CYAN
+        else:
+            d_color = TEXT_DIM
+        deriv_rows += f"""<tr>
+            <td><span class="run-dot" style="background:{color}"></span>{r.run_id}</td>
+            <td class="mono">{last_step}</td>
+            <td class="mono">{deriv:.6f}</td>
+            <td class="mono" style="color:{d_color}">{drop_per_1k:+.4f}</td>
+        </tr>\n"""
+
+    deriv_section = f"""
+    <h2>Learning Velocity (dBPB/dt)</h2>
+    <p class="section-note">Instantaneous BPB derivative at the final step via power law fit.
+    More negative = still improving fast = more headroom for longer training.</p>
+    <table>
+        <thead><tr>
+            <th>Run ID</th><th>Last Step</th><th>dBPB/dt</th><th>Per 1k Steps</th>
+        </tr></thead>
+        <tbody>{deriv_rows}</tbody>
+    </table>
+    """
+
+    # --- Section 5 (Speed Efficiency bar chart) ---
     st_img = _make_step_time_chart(runs)
     speed_section = ""
     if st_img:
@@ -805,6 +861,7 @@ def generate_report(runs: list[RunResult], output: Path) -> None:
     </div>
 
     {pl_section}
+    {deriv_section}
     {ce_section}
     {overfit_section}
     {speed_section}

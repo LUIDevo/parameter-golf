@@ -5,6 +5,9 @@ Usage:
     python analysis/analyze.py summary                     # Table of all runs
     python analysis/analyze.py overfit                     # Overfitting check (all runs)
     python analysis/analyze.py overfit run_id              # Overfitting check (single run)
+    python analysis/analyze.py derivative                  # dBPB/dt at end of each run
+    python analysis/analyze.py zoom                        # Auto-group & compare similar runs
+    python analysis/analyze.py zoom run1 run2 run3         # Compare specific runs
     python analysis/analyze.py compare run1 run2           # Diff two runs
     python analysis/analyze.py plot loss                   # Loss curves
     python analysis/analyze.py plot bpb                    # BPB bar chart
@@ -187,8 +190,203 @@ def cmd_overfit(runs: list[RunResult], run_id: str | None) -> None:
             print("  Consider: fewer iterations, more regularization, or smaller model.")
 
 
+def _fit_power_law(run: RunResult):
+    """Fit L(t) = a * t^b + 1.0 to val_bpb. Returns (a, b) or None."""
+    import numpy as np
+    pts = [(s.step, s.val_bpb) for s in run.steps if s.val_bpb is not None and s.step > 0]
+    if len(pts) < 3:
+        init = [(1, s.val_bpb) for s in run.steps if s.val_bpb is not None and s.step == 0]
+        pts = init + pts
+    if len(pts) < 2:
+        return None
+    steps_arr = np.array([p[0] for p in pts], dtype=float)
+    bpbs_arr = np.array([p[1] for p in pts], dtype=float)
+    mask = bpbs_arr > 1.001
+    if mask.sum() < 2:
+        return None
+    try:
+        log_t = np.log(steps_arr[mask])
+        log_y = np.log(bpbs_arr[mask] - 1.0)
+        coeffs = np.polyfit(log_t, log_y, 1)
+        b = float(coeffs[0])
+        a = float(np.exp(coeffs[1]))
+        return (a, b)
+    except Exception:
+        return None
 
 
+def cmd_derivative(runs: list[RunResult]) -> None:
+    """Show dBPB/dt at the final step for each run via power law fit.
+
+    derivative = a * b * t^(b-1), where L(t) = a * t^b + 1.
+    More negative = still improving fast = more headroom.
+    """
+    results = []
+    for run in runs:
+        params = _fit_power_law(run)
+        if params is None:
+            results.append((run, None, None, None))
+            continue
+        a, b = params
+        last_step = max((s.step for s in run.steps if s.val_bpb is not None and s.step > 0), default=0)
+        if last_step == 0:
+            results.append((run, None, None, None))
+            continue
+        deriv = a * b * (last_step ** (b - 1))
+        # BPB drop per 1000 additional steps (linear approx at current point)
+        drop_per_1k = deriv * 1000
+        results.append((run, last_step, deriv, drop_per_1k))
+
+    # Sort by derivative (most negative first = most headroom)
+    results.sort(key=lambda x: x[2] if x[2] is not None else 0)
+
+    header = f"{'Run ID':<25} {'Last Step':>10} {'dBPB/dt':>12} {'per 1k steps':>13} {'BPB':>8}"
+    print(header)
+    print("-" * len(header))
+    for run, last_step, deriv, drop_per_1k in results:
+        bpb = run.int8_val_bpb or run.final_val_bpb
+        bpb_str = f"{bpb:.4f}" if bpb else "--"
+        if deriv is None:
+            print(f"{run.run_id:<25} {'--':>10} {'--':>12} {'--':>13} {bpb_str:>8}")
+        else:
+            print(
+                f"{run.run_id:<25} "
+                f"{last_step:>10} "
+                f"{deriv:>12.6f} "
+                f"{drop_per_1k:>+13.4f} "
+                f"{bpb_str:>8}"
+            )
+
+    print()
+    print("dBPB/dt: instantaneous rate of BPB change at final step (negative = improving)")
+    print("per 1k steps: estimated BPB change over next 1000 steps (linear approx)")
+    print("Sorted by dBPB/dt -- most negative (most headroom) first.")
+
+
+def cmd_zoom(runs: list[RunResult], run_ids: list[str] | None) -> None:
+    """Zoomed-in comparison of similar runs.
+
+    If run_ids are given, compare those. Otherwise, auto-group runs by
+    similar final step counts and compare within each group.
+    """
+    if run_ids:
+        targets = [r for r in runs if r.run_id in run_ids]
+        missing = set(run_ids) - {r.run_id for r in targets}
+        if missing:
+            print(f"Not found: {', '.join(missing)}")
+        if len(targets) < 2:
+            print("Need at least 2 runs to compare.")
+            return
+        _print_zoom_group(targets)
+    else:
+        # Auto-group by similar step count (within 2x of each other)
+        runs_with_steps = [(r, max((s.step for s in r.steps), default=0)) for r in runs]
+        runs_with_steps.sort(key=lambda x: x[1])
+
+        groups: list[list[RunResult]] = []
+        for run, steps in runs_with_steps:
+            placed = False
+            for group in groups:
+                g_steps = max((s.step for s in group[0].steps), default=0)
+                if g_steps > 0 and steps / g_steps <= 2.0:
+                    group.append(run)
+                    placed = True
+                    break
+            if not placed:
+                groups.append([run])
+
+        for group in groups:
+            if len(group) < 2:
+                continue
+            max_step = max((s.step for r in group for s in r.steps), default=0)
+            print(f"\n=== Runs ending around step {max_step} ===")
+            _print_zoom_group(group)
+
+
+def _print_zoom_group(targets: list[RunResult]) -> None:
+    """Print a detailed zoomed-in comparison of a small set of runs."""
+    targets.sort(key=lambda r: r.int8_val_bpb or r.final_val_bpb or 999)
+
+    # Shared val steps across these runs
+    all_val_steps: set[int] = set()
+    for r in targets:
+        for s in r.steps:
+            if s.val_bpb is not None:
+                all_val_steps.add(s.step)
+    val_steps_sorted = sorted(all_val_steps)
+
+    # Header
+    best = targets[0]
+    print()
+    header = f"{'Run ID':<20} {'BPB(q)':>8} {'Val Loss':>9} {'Params':>12} {'VRAM':>8} {'Step ms':>8}"
+    print(header)
+    print("-" * len(header))
+    for r in targets:
+        bpb = r.int8_val_bpb or r.final_val_bpb
+        bpb_str = f"{bpb:.4f}" if bpb else "--"
+        vl = f"{r.final_val_loss:.4f}" if r.final_val_loss else "--"
+        params = f"{r.model_params:,}" if r.model_params else "--"
+        vram = f"{r.peak_memory_mib}" if r.peak_memory_mib else "--"
+        step_avg = "--"
+        steps_with_time = [s for s in r.steps if s.step_avg_ms > 0]
+        if steps_with_time:
+            step_avg = f"{steps_with_time[-1].step_avg_ms:.0f}"
+        print(f"{r.run_id:<20} {bpb_str:>8} {vl:>9} {params:>12} {vram:>8} {step_avg:>8}")
+
+    # Delta from best
+    best_bpb = best.int8_val_bpb or best.final_val_bpb
+    if best_bpb and len(targets) > 1:
+        print()
+        print(f"  Delta from best ({best.run_id}):")
+        for r in targets[1:]:
+            bpb = r.int8_val_bpb or r.final_val_bpb
+            if bpb:
+                print(f"    {r.run_id:<20} {bpb - best_bpb:>+.4f} BPB")
+
+    # Val BPB at shared checkpoints (the zoomed-in view)
+    if val_steps_sorted:
+        print()
+        step_header = f"{'Step':>8}"
+        for r in targets:
+            step_header += f" {r.run_id:>14}"
+        print(step_header)
+        print("-" * len(step_header))
+
+        for step in val_steps_sorted:
+            row = f"{step:>8}"
+            for r in targets:
+                val = next((s.val_bpb for s in r.steps if s.step == step and s.val_bpb is not None), None)
+                row += f" {val:>14.4f}" if val else f" {'--':>14}"
+            print(row)
+
+    # Hyperparameter diff — only show what's different
+    hp_attrs = [
+        "model_params", "num_heads", "num_kv_heads", "train_batch_tokens",
+        "train_seq_len", "iterations", "warmup_steps", "max_wallclock_seconds",
+        "embed_lr", "head_lr", "matrix_lr", "scalar_lr", "tie_embeddings",
+    ]
+    diffs = []
+    for attr in hp_attrs:
+        vals = [getattr(r, attr, None) for r in targets]
+        if len(set(str(v) for v in vals)) > 1:
+            diffs.append((attr, vals))
+
+    if diffs:
+        print()
+        print("Hyperparameter differences:")
+        diff_header = f"  {'Param':<25}"
+        for r in targets:
+            diff_header += f" {r.run_id:>14}"
+        print(diff_header)
+        print("  " + "-" * (len(diff_header) - 2))
+        for attr, vals in diffs:
+            row = f"  {attr:<25}"
+            for v in vals:
+                row += f" {str(v):>14}"
+            print(row)
+
+
+def cmd_summary(runs: list[RunResult]) -> None:
     if not runs:
         print("No log files found in logs/")
         return
@@ -406,6 +604,11 @@ def main() -> None:
     p_overfit = sub.add_parser("overfit", help="Overfitting diagnostic for one or all runs")
     p_overfit.add_argument("run_id", nargs="?", help="Run ID (omit for all runs)")
 
+    sub.add_parser("derivative", help="Show dBPB/dt at end of each run (learning velocity)")
+
+    p_zoom = sub.add_parser("zoom", help="Zoomed comparison of similar runs")
+    p_zoom.add_argument("run_ids", nargs="*", help="Run IDs to compare (omit to auto-group)")
+
     p_cmp = sub.add_parser("compare", help="Compare two runs")
     p_cmp.add_argument("run1", help="First run ID")
     p_cmp.add_argument("run2", help="Second run ID")
@@ -444,6 +647,10 @@ def main() -> None:
         cmd_summary(runs)
     elif args.command == "overfit":
         cmd_overfit(runs, getattr(args, "run_id", None))
+    elif args.command == "derivative":
+        cmd_derivative(runs)
+    elif args.command == "zoom":
+        cmd_zoom(runs, args.run_ids if args.run_ids else None)
     elif args.command == "compare":
         cmd_compare(runs, args.run1, args.run2)
     elif args.command == "detail":
