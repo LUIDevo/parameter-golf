@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parameter Golf — Simulator</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #1a1b2e;
+  --bg-card: #1e2035;
+  --grid: #2d2a4a;
+  --border: #3a3660;
+  --text: #d0d0e0;
+  --dim: #7a7a9a;
+  --green: #33ff88;
+  --cyan: #00ccff;
+  --red: #ff4466;
+  --amber: #ffaa00;
+  --white: #e8e8f0;
+  --blue: #5577ff;
+  --purple: #bb77ff;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+h1 { font-size: 22px; font-weight: 700; color: var(--white); letter-spacing: -0.3px; }
+h2 { font-size: 13px; font-weight: 600; color: var(--dim); text-transform: uppercase;
+     letter-spacing: 1.4px; margin: 24px 0 12px; padding-bottom: 7px;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 13px; font-weight: 600; color: var(--white); margin-bottom: 8px; }
+
+.page-header {
+  padding: 20px 28px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: baseline; gap: 16px;
+}
+.page-header .sub { color: var(--dim); font-size: 13px; }
+
+/* Tabs */
+.tab-bar {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  background: var(--bg-card);
+}
+.tab-btn {
+  padding: 11px 20px;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--dim); font-size: 13px; font-weight: 500;
+  cursor: pointer; margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--green); border-bottom-color: var(--green); }
+
+.tab-panel { display: none; padding: 24px 28px 48px; }
+.tab-panel.active { display: block; }
+
+/* Two-column layout */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .cols, .cols3 { grid-template-columns: 1fr; } }
+
+/* Cards */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+/* Slider rows */
+.field { margin-bottom: 12px; }
+.field label {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 12px; color: var(--dim); margin-bottom: 4px;
+}
+.field label .val { color: var(--white); font-weight: 600; font-variant-numeric: tabular-nums; }
+input[type=range] {
+  width: 100%; height: 4px; cursor: pointer;
+  accent-color: var(--green);
+}
+select, input[type=text], input[type=number], textarea {
+  background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); padding: 6px 10px; border-radius: 5px;
+  font-size: 13px; width: 100%;
+}
+select:focus, input:focus, textarea:focus {
+  outline: none; border-color: var(--green);
+}
+textarea { font-family: monospace; font-size: 12px; resize: vertical; }
+
+/* Metrics panel */
+.metrics-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 8px; margin-bottom: 10px;
+}
+.metric {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.metric .label { font-size: 10px; color: var(--dim); text-transform: uppercase;
+                  letter-spacing: 0.8px; margin-bottom: 2px; }
+.metric .value { font-size: 18px; font-weight: 700; color: var(--white);
+                  font-variant-numeric: tabular-nums; }
+.metric .value.green { color: var(--green); }
+.metric .value.red   { color: var(--red); }
+.metric .value.amber { color: var(--amber); }
+.metric .sub-value { font-size: 11px; color: var(--dim); margin-top: 1px; }
+
+/* Command box */
+.cmd-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--cyan);
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.8;
+  position: relative;
+}
+.copy-btn {
+  position: absolute; top: 8px; right: 8px;
+  background: var(--border); border: none; border-radius: 4px;
+  color: var(--text); font-size: 11px; padding: 3px 8px;
+  cursor: pointer;
+}
+.copy-btn:hover { background: var(--green); color: var(--bg); }
+
+/* Range bar for BO params */
+.range-bar-row { margin-bottom: 10px; }
+.range-bar-row .name { font-size: 12px; color: var(--white); margin-bottom: 3px;
+                        display: flex; justify-content: space-between; }
+.range-bar-row .name span { color: var(--dim); font-size: 11px; }
+.range-bar-track {
+  background: var(--grid); border-radius: 3px; height: 6px;
+  position: relative;
+}
+.range-bar-fill {
+  background: var(--blue); border-radius: 3px; height: 100%;
+}
+
+/* Tables */
+table { border-collapse: collapse; width: 100%; margin-bottom: 12px; font-size: 13px; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--grid); }
+th { background: var(--bg); color: var(--dim); font-size: 10px; font-weight: 600;
+     text-transform: uppercase; letter-spacing: 0.9px; }
+tr:hover { background: var(--bg-card); }
+td { font-variant-numeric: tabular-nums; }
+
+/* Verdict badges */
+.badge {
+  display: inline-block; padding: 2px 7px; border-radius: 4px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+}
+.badge-green { background: rgba(51,255,136,0.12); color: var(--green); }
+.badge-red   { background: rgba(255,68,102,0.12);  color: var(--red); }
+.badge-amber { background: rgba(255,170,0,0.12);   color: var(--amber); }
+
+/* Activation row */
+.act-row { display: flex; align-items: center; gap: 10px; }
+.act-row select { flex: 1; }
+.act-svg-wrap { flex-shrink: 0; }
+
+/* Experiment card output */
+.exp-card-out {
+  background: var(--bg);
+  border: 1px solid var(--green);
+  border-radius: 6px;
+  padding: 14px;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text);
+  white-space: pre-wrap;
+  display: none;
+  margin-top: 14px;
+}
+
+.btn {
+  background: var(--green); color: var(--bg);
+  border: none; border-radius: 5px;
+  padding: 8px 16px; font-size: 13px; font-weight: 600;
+  cursor: pointer; margin-top: 8px;
+}
+.btn:hover { opacity: 0.85; }
+.btn-outline {
+  background: none; border: 1px solid var(--border);
+  color: var(--text); border-radius: 5px;
+  padding: 7px 14px; font-size: 12px; cursor: pointer;
+}
+.btn-outline:hover { border-color: var(--green); color: var(--green); }
+
+.warn { color: var(--amber); font-size: 12px; margin-top: 6px; }
+.info { color: var(--dim);   font-size: 12px; margin-top: 6px; }
+.section-note { color: var(--dim); font-size: 12px; margin: -8px 0 12px; }
+
+/* nproc row */
+.inline-row { display: flex; gap: 10px; align-items: center; }
+.inline-row label { font-size: 12px; color: var(--dim); white-space: nowrap; }
+.inline-row select { width: auto; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Parameter Golf — Simulator</h1>
+  <span class="sub">interactive design tool · dark matter edition</span>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('arch')">Architecture &amp; Training</button>
+  <button class="tab-btn"        onclick="switchTab('bo')">Bayesian Optimizer</button>
+  <button class="tab-btn"        onclick="switchTab('exp')">Experiment Planner</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TAB 1 — Architecture & Training Simulator
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="tab-arch" class="tab-panel active">
+  <div class="cols">
+
+    <!-- LEFT: sliders -->
+    <div>
+
+      <h2>Architecture</h2>
+      <div class="card">
+        <div class="field">
+          <label>MODEL_DIM <span class="val" id="v-dim">512</span></label>
+          <input type="range" id="s-dim" min="256" max="1024" step="64" value="512"
+                 oninput="update()">
+        </div>
+        <div class="field">
+          <label>NUM_LAYERS <span class="val" id="v-layers">9</span></label>
+          <input type="range" id="s-layers" min="4" max="24" step="1" value="9"
+                 oninput="update()">
+        </div>
+        <div class="field">
+          <label>NUM_HEADS <span class="val" id="v-heads">8</span></label>
+          <select id="s-heads" onchange="syncKvHeads(); update()">
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="8" selected>8</option>
+            <option value="12">12</option>
+            <option value="16">16</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>NUM_KV_HEADS <span class="val" id="v-kvheads">4</span></label>
+          <select id="s-kvheads" onchange="update()">
+            <option value="4" selected>4</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>MLP_MULT <span class="val" id="v-mlp">4</span></label>
+          <select id="s-mlp" onchange="update()">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4" selected>4</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Activation</label>
+          <div class="act-row">
+            <select id="s-act" onchange="updateActSvg()">
+              <option value="gelu"     selected>GeLU (default)</option>
+              <option value="swiglu">SwiGLU (LLaMA)</option>
+              <option value="tanh">tanh (micrograd)</option>
+              <option value="relu">ReLU</option>
+              <option value="leakyrelu">LeakyReLU</option>
+            </select>
+            <div class="act-svg-wrap">
+              <div id="svg-gelu"      class="act-svg"><svg viewBox="0 0 96 48" width="96" height="48" style="background:#1a1b2e;border-radius:3px;border:1px solid #3a3660;display:block"><line x1="0" y1="28.2" x2="96" y2="28.2" stroke="#2d2a4a" stroke-width="1"/><line x1="48.0" y1="0" x2="48.0" y2="48" stroke="#2d2a4a" stroke-width="1"/><polyline points="0.0,28.3 0.8,28.3 1.6,28.3 2.4,28.3 3.2,28.3 4.0,28.4 4.8,28.4 5.6,28.4 6.5,28.4 7.3,28.4 8.1,28.5 8.9,28.5 9.7,28.5 10.5,28.6 11.3,28.6 12.1,28.6 12.9,28.7 13.7,28.7 14.5,28.8 15.3,28.8 16.1,28.9 16.9,29.0 17.7,29.0 18.6,29.1 19.4,29.2 20.2,29.2 21.0,29.3 21.8,29.4 22.6,29.5 23.4,29.6 24.2,29.7 25.0,29.8 25.8,29.9 26.6,29.9 27.4,30.0 28.2,30.1 29.0,30.2 29.8,30.3 30.7,30.4 31.5,30.4 32.3,30.5 33.1,30.5 33.9,30.6 34.7,30.6 35.5,30.6 36.3,30.6 37.1,30.6 37.9,30.6 38.7,30.5 39.5,30.5 40.3,30.4 41.1,30.3 41.9,30.1 42.8,30.0 43.6,29.8 44.4,29.5 45.2,29.3 46.0,29.0 46.8,28.7 47.6,28.4 48.4,28.1 49.2,27.7 50.0,27.3 50.8,26.8 51.6,26.3 52.4,25.9 53.2,25.3 54.1,24.8 54.9,24.2 55.7,23.6 56.5,23.0 57.3,22.3 58.1,21.7 58.9,21.0 59.7,20.3 60.5,19.6 61.3,18.9 62.1,18.1 62.9,17.4 63.7,16.6 64.5,15.8 65.3,15.1 66.2,14.3 67.0,13.5 67.8,12.7 68.6,11.9 69.4,11.1 70.2,10.3 71.0,9.5 71.8,8.7 72.6,7.9 73.4,7.1 74.2,6.3 75.0,5.5 75.8,4.7 76.6,3.9 77.4,3.1 78.3,2.3 79.1,1.5 79.9,0.8 80.7,0.0 81.5,0.0 82.3,0.0 83.1,0.0 83.9,0.0 84.7,0.0 85.5,0.0 86.3,0.0 87.1,0.0 87.9,0.0 88.7,0.0 89.5,0.0 90.4,0.0 91.2,0.0 92.0,0.0 92.8,0.0 93.6,0.0 94.4,0.0 95.2,0.0 96.0,0.0" fill="none" stroke="#33ff88" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+              <div id="svg-swiglu"    class="act-svg" style="display:none"><svg viewBox="0 0 96 48" width="96" height="48" style="background:#1a1b2e;border-radius:3px;border:1px solid #3a3660;display:block"><line x1="0" y1="28.2" x2="96" y2="28.2" stroke="#2d2a4a" stroke-width="1"/><line x1="48.0" y1="0" x2="48.0" y2="48" stroke="#2d2a4a" stroke-width="1"/><polyline points="0.0,30.2 0.8,30.3 1.6,30.4 2.4,30.4 3.2,30.5 4.0,30.6 4.8,30.6 5.6,30.7 6.5,30.8 7.3,30.8 8.1,30.9 8.9,31.0 9.7,31.1 10.5,31.1 11.3,31.2 12.1,31.3 12.9,31.3 13.7,31.4 14.5,31.5 15.3,31.5 16.1,31.6 16.9,31.7 17.7,31.7 18.6,31.8 19.4,31.9 20.2,31.9 21.0,32.0 21.8,32.0 22.6,32.0 23.4,32.1 24.2,32.1 25.0,32.1 25.8,32.1 26.6,32.2 27.4,32.2 28.2,32.2 29.0,32.2 29.8,32.1 30.7,32.1 31.5,32.1 32.3,32.0 33.1,32.0 33.9,31.9 34.7,31.8 35.5,31.7 36.3,31.6 37.1,31.5 37.9,31.3 38.7,31.2 39.5,31.0 40.3,30.8 41.1,30.6 41.9,30.4 42.8,30.2 43.6,29.9 44.4,29.7 45.2,29.4 46.0,29.1 46.8,28.7 47.6,28.4 48.4,28.1 49.2,27.7 50.0,27.3 50.8,26.9 51.6,26.5 52.4,26.0 53.2,25.5 54.1,25.1 54.9,24.6 55.7,24.1 56.5,23.5 57.3,23.0 58.1,22.4 58.9,21.9 59.7,21.3 60.5,20.7 61.3,20.1 62.1,19.4 62.9,18.8 63.7,18.1 64.5,17.5 65.3,16.8 66.2,16.1 67.0,15.4 67.8,14.7 68.6,14.0 69.4,13.3 70.2,12.6 71.0,11.8 71.8,11.1 72.6,10.4 73.4,9.6 74.2,8.9 75.0,8.1 75.8,7.3 76.6,6.6 77.4,5.8 78.3,5.0 79.1,4.3 79.9,3.5 80.7,2.7 81.5,1.9 82.3,1.2 83.1,0.4 83.9,0.0 84.7,0.0 85.5,0.0 86.3,0.0 87.1,0.0 87.9,0.0 88.7,0.0 89.5,0.0 90.4,0.0 91.2,0.0 92.0,0.0 92.8,0.0 93.6,0.0 94.4,0.0 95.2,0.0 96.0,0.0" fill="none" stroke="#33ff88" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+              <div id="svg-tanh"      class="act-svg" style="display:none"><svg viewBox="0 0 96 48" width="96" height="48" style="background:#1a1b2e;border-radius:3px;border:1px solid #3a3660;display:block"><line x1="0" y1="28.2" x2="96" y2="28.2" stroke="#2d2a4a" stroke-width="1"/><line x1="48.0" y1="0" x2="48.0" y2="48" stroke="#2d2a4a" stroke-width="1"/><polyline points="0.0,42.3 0.8,42.3 1.6,42.3 2.4,42.3 3.2,42.2 4.0,42.2 4.8,42.2 5.6,42.2 6.5,42.2 7.3,42.2 8.1,42.2 8.9,42.1 9.7,42.1 10.5,42.1 11.3,42.1 12.1,42.0 12.9,42.0 13.7,42.0 14.5,41.9 15.3,41.9 16.1,41.8 16.9,41.8 17.7,41.7 18.6,41.7 19.4,41.6 20.2,41.5 21.0,41.4 21.8,41.3 22.6,41.2 23.4,41.1 24.2,41.0 25.0,40.8 25.8,40.7 26.6,40.5 27.4,40.3 28.2,40.2 29.0,39.9 29.8,39.7 30.7,39.5 31.5,39.2 32.3,38.9 33.1,38.6 33.9,38.2 34.7,37.9 35.5,37.5 36.3,37.0 37.1,36.6 37.9,36.1 38.7,35.6 39.5,35.1 40.3,34.5 41.1,33.9 41.9,33.3 42.8,32.7 43.6,32.1 44.4,31.4 45.2,30.7 46.0,30.0 46.8,29.3 47.6,28.6 48.4,27.9 49.2,27.2 50.0,26.5 50.8,25.8 51.6,25.1 52.4,24.4 53.2,23.8 54.1,23.1 54.9,22.5 55.7,21.9 56.5,21.4 57.3,20.9 58.1,20.4 58.9,19.9 59.7,19.4 60.5,19.0 61.3,18.6 62.1,18.2 62.9,17.9 63.7,17.6 64.5,17.3 65.3,17.0 66.2,16.8 67.0,16.5 67.8,16.3 68.6,16.1 69.4,15.9 70.2,15.8 71.0,15.6 71.8,15.5 72.6,15.4 73.4,15.2 74.2,15.1 75.0,15.0 75.8,15.0 76.6,14.9 77.4,14.8 78.3,14.7 79.1,14.7 79.9,14.6 80.7,14.6 81.5,14.5 82.3,14.5 83.1,14.5 83.9,14.4 84.7,14.4 85.5,14.4 86.3,14.4 87.1,14.3 87.9,14.3 88.7,14.3 89.5,14.3 90.4,14.3 91.2,14.2 92.0,14.2 92.8,14.2 93.6,14.2 94.4,14.2 95.2,14.2 96.0,14.2" fill="none" stroke="#33ff88" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+              <div id="svg-relu"      class="act-svg" style="display:none"><svg viewBox="0 0 96 48" width="96" height="48" style="background:#1a1b2e;border-radius:3px;border:1px solid #3a3660;display:block"><line x1="0" y1="28.2" x2="96" y2="28.2" stroke="#2d2a4a" stroke-width="1"/><line x1="48.0" y1="0" x2="48.0" y2="48" stroke="#2d2a4a" stroke-width="1"/><polyline points="0.0,28.2 0.8,28.2 1.6,28.2 2.4,28.2 3.2,28.2 4.0,28.2 4.8,28.2 5.6,28.2 6.5,28.2 7.3,28.2 8.1,28.2 8.9,28.2 9.7,28.2 10.5,28.2 11.3,28.2 12.1,28.2 12.9,28.2 13.7,28.2 14.5,28.2 15.3,28.2 16.1,28.2 16.9,28.2 17.7,28.2 18.6,28.2 19.4,28.2 20.2,28.2 21.0,28.2 21.8,28.2 22.6,28.2 23.4,28.2 24.2,28.2 25.0,28.2 25.8,28.2 26.6,28.2 27.4,28.2 28.2,28.2 29.0,28.2 29.8,28.2 30.7,28.2 31.5,28.2 32.3,28.2 33.1,28.2 33.9,28.2 34.7,28.2 35.5,28.2 36.3,28.2 37.1,28.2 37.9,28.2 38.7,28.2 39.5,28.2 40.3,28.2 41.1,28.2 41.9,28.2 42.8,28.2 43.6,28.2 44.4,28.2 45.2,28.2 46.0,28.2 46.8,28.2 47.6,28.2 48.4,27.9 49.2,27.2 50.0,26.5 50.8,25.7 51.6,25.0 52.4,24.3 53.2,23.6 54.1,22.9 54.9,22.2 55.7,21.5 56.5,20.8 57.3,20.0 58.1,19.3 58.9,18.6 59.7,17.9 60.5,17.2 61.3,16.5 62.1,15.8 62.9,15.1 63.7,14.4 64.5,13.6 65.3,12.9 66.2,12.2 67.0,11.5 67.8,10.8 68.6,10.1 69.4,9.4 70.2,8.7 71.0,7.9 71.8,7.2 72.6,6.5 73.4,5.8 74.2,5.1 75.0,4.4 75.8,3.7 76.6,3.0 77.4,2.3 78.3,1.5 79.1,0.8 79.9,0.1 80.7,0.0 81.5,0.0 82.3,0.0 83.1,0.0 83.9,0.0 84.7,0.0 85.5,0.0 86.3,0.0 87.1,0.0 87.9,0.0 88.7,0.0 89.5,0.0 90.4,0.0 91.2,0.0 92.0,0.0 92.8,0.0 93.6,0.0 94.4,0.0 95.2,0.0 96.0,0.0" fill="none" stroke="#33ff88" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+              <div id="svg-leakyrelu" class="act-svg" style="display:none"><svg viewBox="0 0 96 48" width="96" height="48" style="background:#1a1b2e;border-radius:3px;border:1px solid #3a3660;display:block"><line x1="0" y1="28.2" x2="96" y2="28.2" stroke="#2d2a4a" stroke-width="1"/><line x1="48.0" y1="0" x2="48.0" y2="48" stroke="#2d2a4a" stroke-width="1"/><polyline points="0.0,32.5 0.8,32.4 1.6,32.3 2.4,32.3 3.2,32.2 4.0,32.1 4.8,32.0 5.6,32.0 6.5,31.9 7.3,31.8 8.1,31.8 8.9,31.7 9.7,31.6 10.5,31.5 11.3,31.5 12.1,31.4 12.9,31.3 13.7,31.3 14.5,31.2 15.3,31.1 16.1,31.0 16.9,31.0 17.7,30.9 18.6,30.8 19.4,30.8 20.2,30.7 21.0,30.6 21.8,30.5 22.6,30.5 23.4,30.4 24.2,30.3 25.0,30.3 25.8,30.2 26.6,30.1 27.4,30.1 28.2,30.0 29.0,29.9 29.8,29.8 30.7,29.8 31.5,29.7 32.3,29.6 33.1,29.6 33.9,29.5 34.7,29.4 35.5,29.3 36.3,29.3 37.1,29.2 37.9,29.1 38.7,29.1 39.5,29.0 40.3,28.9 41.1,28.8 41.9,28.8 42.8,28.7 43.6,28.6 44.4,28.6 45.2,28.5 46.0,28.4 46.8,28.3 47.6,28.3 48.4,27.9 49.2,27.2 50.0,26.5 50.8,25.7 51.6,25.0 52.4,24.3 53.2,23.6 54.1,22.9 54.9,22.2 55.7,21.5 56.5,20.8 57.3,20.0 58.1,19.3 58.9,18.6 59.7,17.9 60.5,17.2 61.3,16.5 62.1,15.8 62.9,15.1 63.7,14.4 64.5,13.6 65.3,12.9 66.2,12.2 67.0,11.5 67.8,10.8 68.6,10.1 69.4,9.4 70.2,8.7 71.0,7.9 71.8,7.2 72.6,6.5 73.4,5.8 74.2,5.1 75.0,4.4 75.8,3.7 76.6,3.0 77.4,2.3 78.3,1.5 79.1,0.8 79.9,0.1 80.7,0.0 81.5,0.0 82.3,0.0 83.1,0.0 83.9,0.0 84.7,0.0 85.5,0.0 86.3,0.0 87.1,0.0 87.9,0.0 88.7,0.0 89.5,0.0 90.4,0.0 91.2,0.0 92.0,0.0 92.8,0.0 93.6,0.0 94.4,0.0 95.2,0.0 96.0,0.0" fill="none" stroke="#33ff88" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2>Training</h2>
+      <div class="card">
+        <div class="field">
+          <label>ITERATIONS <span class="val" id="v-iters">1000</span></label>
+          <input type="range" id="s-iters" min="200" max="5000" step="100" value="1000"
+                 oninput="update()">
+        </div>
+        <div class="field">
+          <label>TRAIN_BATCH_TOKENS <span class="val" id="v-batch">524,288</span></label>
+          <select id="s-batch" onchange="update()">
+            <option value="131072">131,072</option>
+            <option value="262144">262,144</option>
+            <option value="524288" selected>524,288</option>
+            <option value="1048576">1,048,576</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>TRAIN_SEQ_LEN <span class="val" id="v-seqlen">1024</span></label>
+          <select id="s-seqlen" onchange="update()">
+            <option value="512">512</option>
+            <option value="1024" selected>1024</option>
+            <option value="2048">2048</option>
+            <option value="4096">4096</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>WARMUP_STEPS <span class="val" id="v-warmup">100</span></label>
+          <input type="range" id="s-warmup" min="10" max="500" step="10" value="100"
+                 oninput="update()">
+        </div>
+        <div class="field">
+          <label>WARMDOWN_ITERS <span class="val" id="v-warmdown">300</span></label>
+          <input type="range" id="s-warmdown" min="100" max="2000" step="100" value="300"
+                 oninput="update()">
+        </div>
+      </div>
+
+      <h2>Optimizer</h2>
+      <div class="card">
+        <div class="field">
+          <label>Optimizer type</label>
+          <select id="s-optim" onchange="update()">
+            <option value="muon" selected>Muon (current)</option>
+            <option value="adamw">AdamW</option>
+            <option value="sgd">SGD + momentum</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>MATRIX_LR <span class="val" id="v-mlr">0.0500</span></label>
+          <input type="range" id="s-mlr" min="-6.9" max="-1.6" step="0.05" value="-2.996"
+                 oninput="update()">
+        </div>
+        <div class="field">
+          <label>SCALAR_LR <span class="val" id="v-slr">0.0500</span></label>
+          <input type="range" id="s-slr" min="-6.9" max="-1.6" step="0.05" value="-2.996"
+                 oninput="update()">
+        </div>
+        <div class="field">
+          <label>TIED_EMBED_LR <span class="val" id="v-elr">0.0500</span></label>
+          <input type="range" id="s-elr" min="-6.9" max="-1.6" step="0.05" value="-2.996"
+                 oninput="update()">
+        </div>
+        <div class="field">
+          <label>MUON_MOMENTUM <span class="val" id="v-mom">0.950</span></label>
+          <input type="range" id="s-mom" min="0.85" max="0.99" step="0.005" value="0.95"
+                 oninput="update()">
+        </div>
+        <div class="field">
+          <label>Weight decay <span class="val" id="v-wd">0.000</span></label>
+          <input type="range" id="s-wd" min="0" max="0.1" step="0.005" value="0"
+                 oninput="update()">
+        </div>
+      </div>
+
+    </div><!-- /LEFT -->
+
+    <!-- RIGHT: live metrics + command -->
+    <div>
+
+      <h2>Live Metrics</h2>
+      <div class="metrics-grid">
+        <div class="metric">
+          <div class="label">Parameters</div>
+          <div class="value" id="m-params">—</div>
+        </div>
+        <div class="metric">
+          <div class="label">FP32 size</div>
+          <div class="value" id="m-fp32">—</div>
+          <div class="sub-value">uncompressed</div>
+        </div>
+        <div class="metric">
+          <div class="label">INT8+zlib size</div>
+          <div class="value" id="m-int8">—</div>
+          <div class="sub-value">estimated submission</div>
+        </div>
+        <div class="metric">
+          <div class="label">Fits 16 MB cap?</div>
+          <div class="value" id="m-fits16">—</div>
+        </div>
+        <div class="metric">
+          <div class="label">Tokens / sec (1×H100)</div>
+          <div class="value" id="m-tps">—</div>
+        </div>
+        <div class="metric">
+          <div class="label">Time · 1×H100</div>
+          <div class="value" id="m-t1">—</div>
+        </div>
+        <div class="metric">
+          <div class="label">Time · 8×H100</div>
+          <div class="value" id="m-t8">—</div>
+        </div>
+        <div class="metric">
+          <div class="label">Fits 10 min wall?</div>
+          <div class="value" id="m-fits10">—</div>
+        </div>
+        <div class="metric" style="grid-column:1/-1">
+          <div class="label">Est. final BPB  (power law from smoke_005)</div>
+          <div class="value" id="m-bpb">—</div>
+          <div class="sub-value" id="m-bpb-sub">BPB ≈ 3.8 · tokens^(−0.12) + 1.0</div>
+        </div>
+      </div>
+
+      <h2>Ready-to-Run Command</h2>
+      <div class="card">
+        <div class="inline-row" style="margin-bottom:10px">
+          <label>RUN_ID</label>
+          <input type="text" id="s-runid" value="experiment_001"
+                 style="width:180px" oninput="update()">
+          <label>nproc</label>
+          <select id="s-nproc" onchange="update()" style="width:70px">
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+            <option value="4">4</option>
+            <option value="8">8</option>
+          </select>
+        </div>
+        <div style="position:relative">
+          <pre class="cmd-box" id="cmd-out"></pre>
+          <button class="copy-btn" onclick="copyCmd()">Copy</button>
+        </div>
+        <p class="info" id="optim-note" style="margin-top:8px"></p>
+      </div>
+
+    </div><!-- /RIGHT -->
+
+  </div><!-- /cols -->
+</div><!-- /tab-arch -->
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TAB 2 — Bayesian Optimizer Dashboard
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="tab-bo" class="tab-panel">
+  <div class="cols">
+
+    <!-- LEFT: search space range bars -->
+    <div>
+      <h2>Search Space  <span style="font-weight:400;text-transform:none;letter-spacing:0">(editable bounds)</span></h2>
+      <div class="card" id="bo-space-card">
+
+        <div class="range-bar-row" id="bor-num_layers">
+          <div class="name">num_layers <span>int · 6 – 16</span></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+            <input type="number" id="bo-num_layers-lo" value="6"  min="1" max="24"
+                   style="width:60px" onchange="renderBoSpace()">
+            <div class="range-bar-track" style="flex:1">
+              <div class="range-bar-fill" id="bof-num_layers" style="width:100%"></div>
+            </div>
+            <input type="number" id="bo-num_layers-hi" value="16" min="1" max="24"
+                   style="width:60px" onchange="renderBoSpace()">
+          </div>
+        </div>
+
+        <div class="range-bar-row">
+          <div class="name">mlp_mult <span>categorical · [2, 3, 4]</span></div>
+          <div style="display:flex;gap:6px;margin-top:4px">
+            <label style="font-size:12px;color:var(--dim)">
+              <input type="checkbox" id="bo-mlp-2" checked onchange="renderBoCmd()"> 2
+            </label>
+            <label style="font-size:12px;color:var(--dim)">
+              <input type="checkbox" id="bo-mlp-3" checked onchange="renderBoCmd()"> 3
+            </label>
+            <label style="font-size:12px;color:var(--dim)">
+              <input type="checkbox" id="bo-mlp-4" checked onchange="renderBoCmd()"> 4
+            </label>
+          </div>
+        </div>
+
+        <div class="range-bar-row">
+          <div class="name">matrix_lr <span>log-float · 0.01 – 0.12</span></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+            <input type="number" id="bo-matrix_lr-lo" value="0.01" min="0.001" max="0.5" step="0.005"
+                   style="width:70px" onchange="renderBoSpace()">
+            <div class="range-bar-track" style="flex:1">
+              <div class="range-bar-fill" id="bof-matrix_lr" style="width:100%"></div>
+            </div>
+            <input type="number" id="bo-matrix_lr-hi" value="0.12" min="0.001" max="0.5" step="0.005"
+                   style="width:70px" onchange="renderBoSpace()">
+          </div>
+        </div>
+
+        <div class="range-bar-row">
+          <div class="name">scalar_lr <span>log-float · 0.01 – 0.12</span></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+            <input type="number" id="bo-scalar_lr-lo" value="0.01" min="0.001" max="0.5" step="0.005"
+                   style="width:70px" onchange="renderBoSpace()">
+            <div class="range-bar-track" style="flex:1">
+              <div class="range-bar-fill" id="bof-scalar_lr" style="width:100%"></div>
+            </div>
+            <input type="number" id="bo-scalar_lr-hi" value="0.12" min="0.001" max="0.5" step="0.005"
+                   style="width:70px" onchange="renderBoSpace()">
+          </div>
+        </div>
+
+        <div class="range-bar-row">
+          <div class="name">tied_embed_lr <span>log-float · 0.01 – 0.15</span></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+            <input type="number" id="bo-tied_embed_lr-lo" value="0.01" min="0.001" max="0.5" step="0.005"
+                   style="width:70px" onchange="renderBoSpace()">
+            <div class="range-bar-track" style="flex:1">
+              <div class="range-bar-fill" id="bof-tied_embed_lr" style="width:100%"></div>
+            </div>
+            <input type="number" id="bo-tied_embed_lr-hi" value="0.15" min="0.001" max="0.5" step="0.005"
+                   style="width:70px" onchange="renderBoSpace()">
+          </div>
+        </div>
+
+        <div class="range-bar-row">
+          <div class="name">muon_momentum <span>float · 0.90 – 0.98</span></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+            <input type="number" id="bo-muon_momentum-lo" value="0.90" min="0.5" max="0.999" step="0.01"
+                   style="width:70px" onchange="renderBoSpace()">
+            <div class="range-bar-track" style="flex:1">
+              <div class="range-bar-fill" id="bof-muon_momentum" style="width:100%"></div>
+            </div>
+            <input type="number" id="bo-muon_momentum-hi" value="0.98" min="0.5" max="0.999" step="0.01"
+                   style="width:70px" onchange="renderBoSpace()">
+          </div>
+        </div>
+
+        <div class="range-bar-row">
+          <div class="name">qk_gain_init <span>float · 0.5 – 3.0</span></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+            <input type="number" id="bo-qk_gain_init-lo" value="0.5" min="0.1" max="5.0" step="0.1"
+                   style="width:70px" onchange="renderBoSpace()">
+            <div class="range-bar-track" style="flex:1">
+              <div class="range-bar-fill" id="bof-qk_gain_init" style="width:100%"></div>
+            </div>
+            <input type="number" id="bo-qk_gain_init-hi" value="3.0" min="0.1" max="5.0" step="0.1"
+                   style="width:70px" onchange="renderBoSpace()">
+          </div>
+        </div>
+
+        <div class="range-bar-row">
+          <div class="name">warmdown_iters <span>int · 200 – 2000 step 200</span></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+            <input type="number" id="bo-warmdown_iters-lo" value="200"  min="100" max="3000" step="200"
+                   style="width:70px" onchange="renderBoSpace()">
+            <div class="range-bar-track" style="flex:1">
+              <div class="range-bar-fill" id="bof-warmdown_iters" style="width:100%"></div>
+            </div>
+            <input type="number" id="bo-warmdown_iters-hi" value="2000" min="100" max="3000" step="200"
+                   style="width:70px" onchange="renderBoSpace()">
+          </div>
+        </div>
+
+      </div><!-- /card -->
+
+      <h2>BO Run Planner</h2>
+      <div class="card">
+        <div class="field">
+          <label>n_trials <span class="val" id="v-ntrials">15</span></label>
+          <input type="range" id="s-ntrials" min="5" max="50" step="1" value="15"
+                 oninput="updateBo()">
+        </div>
+        <div class="field">
+          <label>iters_per_trial <span class="val" id="v-boiters">200</span></label>
+          <input type="range" id="s-boiters" min="50" max="500" step="50" value="200"
+                 oninput="updateBo()">
+        </div>
+        <div class="metrics-grid" style="margin-top:12px">
+          <div class="metric">
+            <div class="label">Est. GPU-hours</div>
+            <div class="value" id="bo-m-hours">—</div>
+          </div>
+          <div class="metric">
+            <div class="label">Est. cost @ $2/hr H100</div>
+            <div class="value" id="bo-m-cost">—</div>
+          </div>
+        </div>
+        <h3 style="margin-top:4px">Command</h3>
+        <div style="position:relative">
+          <pre class="cmd-box" id="bo-cmd-out"></pre>
+          <button class="copy-btn" onclick="copyBoCmd()">Copy</button>
+        </div>
+      </div>
+
+    </div><!-- /LEFT -->
+
+    <!-- RIGHT: arch configs table -->
+    <div>
+      <h2>ARCH_CONFIGS  <span style="font-weight:400;text-transform:none;letter-spacing:0">(13 pre-validated entries)</span></h2>
+      <p class="section-note">Param estimate at 9 layers, MLP_MULT=4. INT8 size ≈ params × 0.75 B.</p>
+      <div class="card" style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>dim</th><th>heads</th><th>kv</th>
+              <th>params</th><th>INT8 MB</th><th>≤16MB</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>0</td><td>384</td><td>6</td><td>3</td><td>15.01M</td><td>11.3</td><td><span style="color:#33ff88">✓</span></td></tr>
+<tr><td>1</td><td>384</td><td>8</td><td>4</td><td>15.01M</td><td>11.3</td><td><span style="color:#33ff88">✓</span></td></tr>
+<tr><td>2</td><td>448</td><td>8</td><td>4</td><td>20.34M</td><td>15.3</td><td><span style="color:#33ff88">✓</span></td></tr>
+<tr><td>3</td><td>512</td><td>8</td><td>4</td><td>26.49M</td><td>19.9</td><td><span style="color:#ff4466">✗</span></td></tr>
+<tr><td>4</td><td>512</td><td>8</td><td>8</td><td>28.85M</td><td>21.6</td><td><span style="color:#ff4466">✗</span></td></tr>
+<tr><td>5</td><td>512</td><td>16</td><td>4</td><td>25.32M</td><td>19.0</td><td><span style="color:#ff4466">✗</span></td></tr>
+<tr><td>6</td><td>576</td><td>8</td><td>4</td><td>33.46M</td><td>25.1</td><td><span style="color:#ff4466">✗</span></td></tr>
+<tr><td>7</td><td>576</td><td>12</td><td>4</td><td>32.46M</td><td>24.3</td><td><span style="color:#ff4466">✗</span></td></tr>
+<tr><td>8</td><td>640</td><td>8</td><td>4</td><td>41.23M</td><td>30.9</td><td><span style="color:#ff4466">✗</span></td></tr>
+<tr><td>9</td><td>640</td><td>10</td><td>5</td><td>41.23M</td><td>30.9</td><td><span style="color:#ff4466">✗</span></td></tr>
+<tr><td>10</td><td>768</td><td>8</td><td>4</td><td>59.21M</td><td>44.4</td><td><span style="color:#ff4466">✗</span></td></tr>
+<tr><td>11</td><td>768</td><td>12</td><td>4</td><td>57.44M</td><td>43.1</td><td><span style="color:#ff4466">✗</span></td></tr>
+<tr><td>12</td><td>768</td><td>16</td><td>8</td><td>59.21M</td><td>44.4</td><td><span style="color:#ff4466">✗</span></td></tr>
+
+          </tbody>
+        </table>
+      </div>
+    </div><!-- /RIGHT -->
+
+  </div><!-- /cols -->
+</div><!-- /tab-bo -->
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TAB 3 — Experiment Planner
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="tab-exp" class="tab-panel">
+  <div class="cols">
+
+    <div>
+      <h2>Experiment Card</h2>
+      <div class="card">
+
+        <div class="field">
+          <label>Experiment name</label>
+          <input type="text" id="exp-name" placeholder="e.g. wider_mlp_test" oninput="expChanged()">
+        </div>
+
+        <div class="field">
+          <label>Baseline run</label>
+          <select id="exp-baseline" onchange="expChanged()">
+                        <option value="smoke_005">smoke_005</option>
+            <option value="smoke_006">smoke_006</option>
+            <option value="smoke_007">smoke_007</option>
+            <option value="smoke_008">smoke_008</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Hypothesis — what do you think will happen and why?</label>
+          <textarea id="exp-hyp" rows="3"
+            placeholder="e.g. Wider MLP (mult=4→6) should give more representational capacity per layer, reducing BPB by ~0.02 at the cost of ~20% more params..."
+            oninput="expChanged()"></textarea>
+        </div>
+
+        <div class="field">
+          <label>ONE thing changing</label>
+          <input type="text" id="exp-change"
+            placeholder="e.g. MLP_MULT 4→6  (one change only!)"
+            oninput="expChanged()">
+        </div>
+
+        <div class="field">
+          <label>Expected BPB direction</label>
+          <select id="exp-dir" onchange="expChanged()">
+            <option value="improve">Should improve (lower BPB)</option>
+            <option value="hurt">Should hurt (higher BPB)</option>
+            <option value="unclear">Unclear — exploring</option>
+          </select>
+        </div>
+
+        <div class="field" style="display:flex;align-items:center;gap:10px">
+          <input type="checkbox" id="exp-t4" onchange="expChanged()">
+          <label for="exp-t4" style="color:var(--text);font-size:13px">
+            T4 smoke test first? (Colab — ~30–60× slower, cheap sanity check)
+          </label>
+        </div>
+
+        <div class="field">
+          <label>Iterations for this experiment</label>
+          <input type="number" id="exp-iters" value="1000" min="100" max="5000" step="100"
+                 oninput="expChanged()">
+        </div>
+
+        <div id="exp-cost-note" class="info"></div>
+        <div id="exp-multi-warn" class="warn" style="display:none">
+          ⚠ Multiple variables detected in the "one thing" field. Ablations should change exactly one thing.
+        </div>
+
+        <button class="btn" onclick="generateExpCard()">Generate experiment card</button>
+
+        <pre class="exp-card-out" id="exp-card-out"></pre>
+      </div>
+    </div>
+
+    <div>
+      <h2>Ablation Discipline</h2>
+      <div class="card">
+        <h3>Rules</h3>
+        <ul style="color:var(--dim);font-size:13px;padding-left:18px;line-height:2">
+          <li>Change exactly <strong style="color:var(--white)">one</strong> thing per run</li>
+          <li>Always record the baseline BPB before changing anything</li>
+          <li>Run a T4 smoke test first (200 iters, ~5 min) before committing H100 budget</li>
+          <li>Write the hypothesis <em style="color:var(--cyan)">before</em> running, not after</li>
+          <li>If the result surprises you, it's more valuable than if it doesn't</li>
+        </ul>
+
+        <h3 style="margin-top:18px">Context</h3>
+        <table>
+          <tbody>
+            <tr><td style="color:var(--dim)">Current best BPB</td><td style="color:var(--green);font-weight:700">1.1194</td></tr>
+            <tr><td style="color:var(--dim)">Our best (smoke_005)</td><td>1.3714</td></tr>
+            <tr><td style="color:var(--dim)">Gap to close</td><td style="color:var(--amber)">~0.25 BPB</td></tr>
+            <tr><td style="color:var(--dim)">Baseline params</td><td>17M</td></tr>
+            <tr><td style="color:var(--dim)">Baseline config</td><td>9L · 512d · 8H · 4KV</td></tr>
+            <tr><td style="color:var(--dim)">Budget per run</td><td>~10 min · 8×H100 ≈ $2.67</td></tr>
+            <tr><td style="color:var(--dim)">smoke_005 converged?</td><td style="color:var(--amber)">No — still improving at step 1000</td></tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin-top:18px">Quick cost estimator</h3>
+        <div class="metrics-grid" style="margin-top:8px">
+          <div class="metric">
+            <div class="label">1×H100 cost / 1000 iters</div>
+            <div class="value">~$0.33</div>
+            <div class="sub-value">@ $2/hr, ~10min/1k iters baseline</div>
+          </div>
+          <div class="metric">
+            <div class="label">8×H100 cost / 1000 iters</div>
+            <div class="value">~$2.67</div>
+            <div class="sub-value">full training budget</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /cols -->
+</div><!-- /tab-exp -->
+
+
+<script>
+// ─────────────────────────────────────────────────────────────────
+// Tab switching
+// ─────────────────────────────────────────────────────────────────
+function switchTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+function fmtM(n) {
+  if (n >= 1e9) return (n/1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'k';
+  return n.toString();
+}
+
+function fmtMB(bytes) {
+  return (bytes / 1e6).toFixed(1) + ' MB';
+}
+
+function fmtMin(min) {
+  if (min < 1) return (min * 60).toFixed(0) + 's';
+  if (min >= 60) return (min / 60).toFixed(1) + 'h';
+  return min.toFixed(1) + 'min';
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Param estimation
+// ─────────────────────────────────────────────────────────────────
+function estimateParams(dim, layers, heads, kvHeads, mlpMult) {
+  const vocab = 1024;
+  const headDim = dim / heads;
+  // Q: dim×(heads×headDim)=dim²  K: dim×(kv×headDim)  V: same  O: dim²
+  const attn = dim * dim + 2 * dim * kvHeads * headDim + dim * dim;
+  // MLP: two matmuls of dim→mlp_mult*dim→dim
+  const mlp = 2 * dim * (mlpMult * dim);
+  // LayerNorm: 2 params * dim * 2 norms per layer (small but included)
+  const ln = 4 * dim;
+  return Math.round(layers * (attn + mlp + ln) + vocab * dim);
+}
+
+// tokens/sec on 1×H100 (empirical calibration vs smoke_005 baseline)
+function estimateTPS(dim, layers) {
+  return 500000 / Math.pow(dim / 512, 2) / (layers / 9);
+}
+
+// Power law BPB from smoke_005 fit: L(t) = 3.8 * t^(-0.12) + 1.0
+function estimateBPB(iters, batchTokens) {
+  const t = iters * batchTokens;
+  return 3.8 * Math.pow(t, -0.12) + 1.0;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// KV heads sync (must be divisor of num_heads)
+// ─────────────────────────────────────────────────────────────────
+function syncKvHeads() {
+  const heads = parseInt(document.getElementById('s-heads').value);
+  const sel = document.getElementById('s-kvheads');
+  const prev = parseInt(sel.value) || heads;
+  sel.innerHTML = '';
+  for (let kv = 1; kv <= heads; kv++) {
+    if (heads % kv === 0) {
+      const opt = document.createElement('option');
+      opt.value = kv;
+      opt.textContent = kv;
+      if (kv === prev && heads % prev === 0) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  }
+  // default to half if previous invalid
+  if (!sel.value || heads % parseInt(sel.value) !== 0) {
+    sel.value = Math.floor(heads / 2) || 1;
+  }
+  document.getElementById('v-heads').textContent = heads;
+  document.getElementById('v-kvheads').textContent = sel.value;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Activation SVG toggle
+// ─────────────────────────────────────────────────────────────────
+const ACT_NAMES = ['gelu','swiglu','tanh','relu','leakyrelu'];
+function updateActSvg() {
+  const chosen = document.getElementById('s-act').value;
+  ACT_NAMES.forEach(n => {
+    document.getElementById('svg-' + n).style.display = (n === chosen) ? '' : 'none';
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Main update (Tab 1)
+// ─────────────────────────────────────────────────────────────────
+function update() {
+  const dim      = parseInt(document.getElementById('s-dim').value);
+  const layers   = parseInt(document.getElementById('s-layers').value);
+  const heads    = parseInt(document.getElementById('s-heads').value);
+  const kvHeads  = parseInt(document.getElementById('s-kvheads').value);
+  const mlpMult  = parseInt(document.getElementById('s-mlp').value);
+  const iters    = parseInt(document.getElementById('s-iters').value);
+  const batch    = parseInt(document.getElementById('s-batch').value);
+  const seqLen   = parseInt(document.getElementById('s-seqlen').value);
+  const warmup   = parseInt(document.getElementById('s-warmup').value);
+  const warmdown = parseInt(document.getElementById('s-warmdown').value);
+  const mlrLog   = parseFloat(document.getElementById('s-mlr').value);
+  const slrLog   = parseFloat(document.getElementById('s-slr').value);
+  const elrLog   = parseFloat(document.getElementById('s-elr').value);
+  const mom      = parseFloat(document.getElementById('s-mom').value);
+  const wd       = parseFloat(document.getElementById('s-wd').value);
+  const optim    = document.getElementById('s-optim').value;
+  const act      = document.getElementById('s-act').value;
+  const runId    = document.getElementById('s-runid').value || 'experiment_001';
+  const nproc    = parseInt(document.getElementById('s-nproc').value);
+
+  const mlr = Math.exp(mlrLog);
+  const slr = Math.exp(slrLog);
+  const elr = Math.exp(elrLog);
+
+  // Display slider values
+  document.getElementById('v-dim').textContent     = dim;
+  document.getElementById('v-layers').textContent  = layers;
+  document.getElementById('v-kvheads').textContent = kvHeads;
+  document.getElementById('v-mlp').textContent     = mlpMult;
+  document.getElementById('v-iters').textContent   = iters;
+  document.getElementById('v-batch').textContent   = batch.toLocaleString();
+  document.getElementById('v-seqlen').textContent  = seqLen;
+  document.getElementById('v-warmup').textContent  = warmup;
+  document.getElementById('v-warmdown').textContent = warmdown;
+  document.getElementById('v-mlr').textContent     = mlr.toFixed(4);
+  document.getElementById('v-slr').textContent     = slr.toFixed(4);
+  document.getElementById('v-elr').textContent     = elr.toFixed(4);
+  document.getElementById('v-mom').textContent     = mom.toFixed(3);
+  document.getElementById('v-wd').textContent      = wd.toFixed(3);
+
+  // Metrics
+  const params    = estimateParams(dim, layers, heads, kvHeads, mlpMult);
+  const fp32B     = params * 4;
+  const int8B     = params * 1 * 0.75;
+  const fits16    = int8B <= 16e6;
+  const tps       = estimateTPS(dim, layers);
+  const totalTok  = iters * batch;
+  const t1min     = totalTok / tps / 60;
+  const t8min     = t1min / 8;
+  const fits10    = t8min <= 10.0;
+  const bpb       = estimateBPB(iters, batch);
+
+  document.getElementById('m-params').textContent = fmtM(params);
+  document.getElementById('m-fp32').textContent   = fmtMB(fp32B);
+  document.getElementById('m-int8').textContent   = fmtMB(int8B);
+
+  const fits16El = document.getElementById('m-fits16');
+  fits16El.textContent = fits16 ? 'YES ✓' : 'NO ✗';
+  fits16El.className = 'value ' + (fits16 ? 'green' : 'red');
+
+  document.getElementById('m-tps').textContent = fmtM(Math.round(tps));
+  document.getElementById('m-t1').textContent  = fmtMin(t1min);
+  document.getElementById('m-t8').textContent  = fmtMin(t8min);
+
+  const fits10El = document.getElementById('m-fits10');
+  fits10El.textContent = fits10 ? 'YES ✓' : 'NO ✗';
+  fits10El.className = 'value ' + (fits10 ? 'green' : (t8min <= 12 ? 'amber' : 'red'));
+
+  const bpbEl = document.getElementById('m-bpb');
+  bpbEl.textContent = bpb.toFixed(4);
+  bpbEl.className = 'value ' + (bpb < 1.25 ? 'green' : bpb < 1.5 ? 'amber' : 'red');
+  document.getElementById('m-bpb-sub').textContent =
+    `tokens seen: ${(totalTok/1e6).toFixed(1)}M  ·  power law smoke_005 fit`;
+
+  // Command
+  const cmd = [
+    `RUN_ID=${runId}`,
+    `MODEL_DIM=${dim}`,
+    `NUM_LAYERS=${layers}`,
+    `NUM_HEADS=${heads}`,
+    `NUM_KV_HEADS=${kvHeads}`,
+    `MLP_MULT=${mlpMult}`,
+    `ITERATIONS=${iters}`,
+    `TRAIN_BATCH_TOKENS=${batch}`,
+    `TRAIN_SEQ_LEN=${seqLen}`,
+    `WARMUP_STEPS=${warmup}`,
+    `WARMDOWN_ITERS=${warmdown}`,
+    `MATRIX_LR=${mlr.toFixed(4)}`,
+    `SCALAR_LR=${slr.toFixed(4)}`,
+    `TIED_EMBED_LR=${elr.toFixed(4)}`,
+    `MUON_MOMENTUM=${mom.toFixed(3)}`,
+    (wd > 0 ? `WEIGHT_DECAY=${wd.toFixed(3)}` : null),
+    `ACTIVATION=${act}`,
+    `torchrun --standalone --nproc_per_node=${nproc} train_gpt.py`,
+  ].filter(Boolean).join(' \\\n  ');
+  document.getElementById('cmd-out').textContent = cmd;
+
+  // Optimizer note
+  const noteEl = document.getElementById('optim-note');
+  if (optim !== 'muon') {
+    noteEl.textContent =
+      `⚠ ${optim.toUpperCase()} selected — train_gpt.py uses Muon by default. Switching requires code changes.`;
+  } else {
+    noteEl.textContent = '';
+  }
+}
+
+function copyCmd() {
+  navigator.clipboard.writeText(document.getElementById('cmd-out').textContent);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Tab 2 — BO Dashboard
+// ─────────────────────────────────────────────────────────────────
+function renderBoSpace() {
+  // Just keeps the bars full-width since min/max are user-edited — no best known
+  const bars = ['num_layers','matrix_lr','scalar_lr','tied_embed_lr',
+                 'muon_momentum','qk_gain_init','warmdown_iters'];
+  bars.forEach(p => {
+    const bar = document.getElementById('bof-' + p);
+    if (bar) bar.style.width = '100%';
+  });
+  renderBoCmd();
+}
+
+function renderBoCmd() {
+  const nTrials = parseInt(document.getElementById('s-ntrials').value);
+  const boIters = parseInt(document.getElementById('s-boiters').value);
+
+  document.getElementById('v-ntrials').textContent = nTrials;
+  document.getElementById('v-boiters').textContent = boIters;
+
+  // Cost estimate: ~100 iters/min on 1×H100 at baseline
+  const trialMin = boIters / 100;
+  const totalMin = nTrials * trialMin;
+  const totalHrs = totalMin / 60;
+  const cost = totalHrs * 2;
+
+  document.getElementById('bo-m-hours').textContent = totalHrs.toFixed(2) + 'h';
+  document.getElementById('bo-m-cost').textContent  = '$' + cost.toFixed(2);
+
+  const cmd = `python analysis/bo_tune.py --n-trials ${nTrials} --iters ${boIters}`;
+  document.getElementById('bo-cmd-out').textContent = cmd;
+}
+
+function updateBo() { renderBoCmd(); }
+
+function copyBoCmd() {
+  navigator.clipboard.writeText(document.getElementById('bo-cmd-out').textContent);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Tab 3 — Experiment Planner
+// ─────────────────────────────────────────────────────────────────
+function expChanged() {
+  const iters = parseInt(document.getElementById('exp-iters').value) || 1000;
+  // cost: 1×H100 ~10min/1000iters @ $2/hr → $0.33/1k iters; 8×H100 → $2.67/1k iters
+  const min1  = iters / 100;
+  const cost1 = (min1 / 60) * 2;
+  const cost8 = cost1 * 8;
+  document.getElementById('exp-cost-note').textContent =
+    `Est. cost: 1×H100 ~${min1.toFixed(0)}min ($${cost1.toFixed(2)})  ·  8×H100 ~${(min1/8).toFixed(0)}min ($${cost8.toFixed(2)})`;
+
+  // Detect multiple variables changed
+  const change = document.getElementById('exp-change').value;
+  const warnEl = document.getElementById('exp-multi-warn');
+  const arrows  = (change.match(/→|->|=/g) || []).length;
+  const commas  = (change.match(/,/g) || []).length;
+  const multi   = arrows > 1 || commas >= 2;
+  warnEl.style.display = multi ? '' : 'none';
+}
+
+function generateExpCard() {
+  const name     = document.getElementById('exp-name').value     || '(unnamed)';
+  const baseline = document.getElementById('exp-baseline').value || '—';
+  const hyp      = document.getElementById('exp-hyp').value      || '(no hypothesis written)';
+  const change   = document.getElementById('exp-change').value   || '(not specified)';
+  const dir      = document.getElementById('exp-dir').value;
+  const t4       = document.getElementById('exp-t4').checked;
+  const iters    = parseInt(document.getElementById('exp-iters').value) || 1000;
+
+  const dirStr = { improve: 'Should IMPROVE (lower BPB)',
+                   hurt:    'Should HURT (higher BPB)',
+                   unclear: 'Unclear — exploring' }[dir];
+  const t4Str = t4 ? 'YES ✓' : 'NO — skipping (budget risk)';
+
+  const min8  = iters / 8 / 100;
+  const cost8 = (min8 / 60) * 2 * 8;
+
+  const now = new Date().toISOString().slice(0, 10);
+
+  const card = [
+    '═'.repeat(60),
+    `EXPERIMENT: ${name}`,
+    `Date:       ${now}`,
+    `Baseline:   ${baseline}`,
+    '─'.repeat(60),
+    `Hypothesis:\n  ${hyp}`,
+    '',
+    `ONE change: ${change}`,
+    `Direction:  ${dirStr}`,
+    `T4 smoke:   ${t4Str}`,
+    `Iterations: ${iters}`,
+    `Est. cost:  ~$${cost8.toFixed(2)} (8×H100)`,
+    '═'.repeat(60),
+  ].join('\n');
+
+  const outEl = document.getElementById('exp-card-out');
+  outEl.textContent = card;
+  outEl.style.display = '';
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────────
+syncKvHeads();
+update();
+renderBoSpace();
+renderBoCmd();
+expChanged();
+</script>
+</body>
+</html>
