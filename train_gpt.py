@@ -85,6 +85,7 @@ class Hyperparameters:
     beta2 = float(os.environ.get("BETA2", 0.95))
     adam_eps = float(os.environ.get("ADAM_EPS", 1e-8))
     grad_clip_norm = float(os.environ.get("GRAD_CLIP_NORM", 0.0))
+    dev_mode = bool(int(os.environ.get("DEV_MODE", "0")))
 
 # -----------------------------
 # MUON OPTIMIZER 
@@ -613,10 +614,9 @@ class MLP(nn.Module):
         self.proj._zero_init = True
 
     def forward(self, x: Tensor) -> Tensor:
-        # m=nn.LeakyRelU()
-        # return self.proj(nn.GELU(x))
+        return self.proj(F.gelu(self.fc(x)))
         # x = torch.relu(self.fc(x))
-        return self.proj(x.square())
+        # return self.proj(x.square())
 
 
 class Block(nn.Module):
@@ -735,8 +735,10 @@ def main() -> None:
 
     code = Path(__file__).read_text(encoding="utf-8")
     args = Hyperparameters()
-    zeropower_via_newtonschulz5 = torch.compile(zeropower_via_newtonschulz5)
-
+    if args.dev_mode==False:
+        zeropower_via_newtonschulz5 = torch.compile(zeropower_via_newtonschulz5)
+    else:
+        args.iterations=100
     # -----------------------------
     # DISTRIBUTED + CUDA SETUP
     # -----------------------------
@@ -842,7 +844,7 @@ def main() -> None:
         if isinstance(module, CastedLinear):
             module.float()
     restore_low_dim_params_to_fp32(base_model)
-    compiled_model = torch.compile(base_model, dynamic=False, fullgraph=True)
+    compiled_model = base_model if args.dev_mode else torch.compile(base_model, dynamic=False, fullgraph=True)
     model: nn.Module = DDP(compiled_model, device_ids=[local_rank], broadcast_buffers=False) if distributed else compiled_model
 
     # Optimizer split:
@@ -936,7 +938,7 @@ def main() -> None:
 
     # Warmup primes the compiled forward/backward/optimizer paths, then we restore the
     # initial weights/optimizer state so measured training starts from the true init.
-    if args.warmup_steps > 0:
+    if args.warmup_steps > 0 and args.dev_mode==False:
         initial_model_state = {name: tensor.detach().cpu().clone() for name, tensor in base_model.state_dict().items()}
         initial_optimizer_states = [copy.deepcopy(opt.state_dict()) for opt in optimizers]
         model.train()
