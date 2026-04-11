@@ -1,0 +1,67 @@
+RUN_ID=smoke_010 \
+>        DATA_PATH=./data/datasets/fineweb10B_sp1024/ \
+>        TOKENIZER_PATH=./data/tokenizers/fineweb_1024_bpe.model \
+>        ITERATIONS=500 \
+>        WARMDOWN_ITERS=100 \
+>        GRAD_CLIP_NORM=1.0 \
+>        VAL_LOSS_EVERY=100 \
+>        torchrun --standalone --nproc_per_node=1 train_gpt.py
+logs/smoke_010.txt
+val_bpb:enabled tokenizer_kind=sentencepiece tokenizer_path=./data/tokenizers/fineweb_1024_bpe.model
+train_loader:dataset:fineweb10B_sp1024 train_shards:80
+val_loader:shards pattern=./data/datasets/fineweb10B_sp1024/fineweb_val_*.bin tokens:62021632
+model_params:17059912
+world_size:1 grad_accum_steps:8
+sdp_backends:cudnn=False flash=True mem_efficient=False math=False
+attention_mode:gqa num_heads:8 num_kv_heads:4
+tie_embeddings:True embed_lr:0.05 head_lr:0.0 matrix_lr:0.04 scalar_lr:0.04
+train_batch_tokens:524288 train_seq_len:1024 iterations:500 warmup_steps:20 max_wallclock_seconds:600.000
+seed:1337
+warmup_step:1/20
+warmup_step:2/20
+warmup_step:3/20
+warmup_step:4/20
+warmup_step:5/20
+warmup_step:6/20
+warmup_step:7/20
+warmup_step:8/20
+warmup_step:9/20
+warmup_step:10/20
+warmup_step:11/20
+warmup_step:12/20
+warmup_step:13/20
+warmup_step:14/20
+warmup_step:15/20
+warmup_step:16/20
+warmup_step:17/20
+warmup_step:18/20
+warmup_step:19/20
+warmup_step:20/20
+step:0/500 val_loss:6.9344 val_bpb:4.1069 train_time:0ms step_avg:0.02ms
+step:1/500 train_loss:6.9357 train_time:432ms step_avg:432.43ms
+step:2/500 train_loss:16.3815 train_time:817ms step_avg:408.40ms
+step:3/500 train_loss:10.8220 train_time:1202ms step_avg:400.54ms
+step:4/500 train_loss:7.3297 train_time:1598ms step_avg:399.60ms
+step:5/500 train_loss:6.7597 train_time:1984ms step_avg:396.80ms
+step:6/500 train_loss:6.5812 train_time:2371ms step_avg:395.09ms
+step:7/500 train_loss:6.2124 train_time:2755ms step_avg:393.60ms
+step:8/500 train_loss:6.0455 train_time:3140ms step_avg:392.52ms
+step:9/500 train_loss:5.8708 train_time:3536ms step_avg:392.85ms
+step:10/500 train_loss:5.6789 train_time:3936ms step_avg:393.58ms
+step:100/500 val_loss:3.1301 val_bpb:1.8538 train_time:39395ms step_avg:393.95ms
+step:200/500 train_loss:2.7010 train_time:84341ms step_avg:421.71ms
+step:200/500 val_loss:2.7512 val_bpb:1.6294 train_time:84347ms step_avg:421.74ms
+step:300/500 val_loss:2.6002 val_bpb:1.5400 train_time:123767ms step_avg:412.56ms
+step:400/500 train_loss:2.3659 train_time:167490ms step_avg:418.72ms
+step:400/500 val_loss:2.5262 val_bpb:1.4962 train_time:167500ms step_avg:418.75ms
+step:500/500 val_loss:2.4714 val_bpb:1.4637 train_time:206742ms step_avg:413.48ms
+peak memory allocated: 12233 MiB reserved: 13248 MiB
+Serialized model: 67224578 bytes
+Code size: 47686 bytes
+Total submission size: 67272264 bytes
+Serialized model int8+zlib: 13137572 bytes (payload:17178912 raw_torch:17223564 payload_ratio:3.91x)
+Total submission size int8+zlib: 13185258 bytes
+/workspace/parameter-golf/train_gpt.py:1098: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  quant_state = torch.load(io.BytesIO(zlib.decompress(quant_blob_disk)), map_location="cpu")
+final_int8_zlib_roundtrip val_loss:2.4731 val_bpb:1.4647 eval_time:11324ms
+final_int8_zlib_roundtrip_exact val_loss:2.47311641 val_bpb:1.46471884
