@@ -1,0 +1,69 @@
+root@94c4a712c28c:/workspace/parameter-golf# RUN_ID=smoke_012 \
+>     DATA_PATH=./data/datasets/fineweb10B_sp1024/ \
+>     TOKENIZER_PATH=./data/tokenizers/fineweb_1024_bpe.model \
+>     ITERATIONS=500 \
+>     WARMDOWN_ITERS=100 \
+>     GRAD_CLIP_NORM=1.0 \
+>     VAL_LOSS_EVERY=100 \
+>     MATRIX_LR=0.06 \
+>     torchrun --standalone --nproc_per_node=1 train_gpt.py
+
+logs/smoke_012.txt
+val_bpb:enabled tokenizer_kind=sentencepiece tokenizer_path=./data/tokenizers/fineweb_1024_bpe.model
+train_loader:dataset:fineweb10B_sp1024 train_shards:80
+val_loader:shards pattern=./data/datasets/fineweb10B_sp1024/fineweb_val_*.bin tokens:62021632
+model_params:17059912
+world_size:1 grad_accum_steps:8
+sdp_backends:cudnn=False flash=True mem_efficient=False math=False
+attention_mode:gqa num_heads:8 num_kv_heads:4
+tie_embeddings:True embed_lr:0.05 head_lr:0.0 matrix_lr:0.06 scalar_lr:0.04
+train_batch_tokens:524288 train_seq_len:1024 iterations:500 warmup_steps:20 max_wallclock_seconds:600.000
+seed:1337
+warmup_step:1/20
+warmup_step:2/20
+warmup_step:3/20
+warmup_step:4/20
+warmup_step:5/20
+warmup_step:6/20
+warmup_step:7/20
+warmup_step:8/20
+warmup_step:9/20
+warmup_step:10/20
+warmup_step:11/20
+warmup_step:12/20
+warmup_step:13/20
+warmup_step:14/20
+warmup_step:15/20
+warmup_step:16/20
+warmup_step:17/20
+warmup_step:18/20
+warmup_step:19/20
+warmup_step:20/20
+step:0/500 val_loss:6.9344 val_bpb:4.1069 train_time:0ms step_avg:0.01ms
+step:1/500 train_loss:6.9357 train_time:475ms step_avg:474.52ms
+step:2/500 train_loss:15.9936 train_time:869ms step_avg:434.38ms
+step:3/500 train_loss:9.7531 train_time:1294ms step_avg:431.33ms
+step:4/500 train_loss:7.0283 train_time:1690ms step_avg:422.51ms
+step:5/500 train_loss:7.4060 train_time:2085ms step_avg:417.05ms
+step:6/500 train_loss:7.6330 train_time:2479ms step_avg:413.16ms
+step:7/500 train_loss:7.2394 train_time:2875ms step_avg:410.77ms
+step:8/500 train_loss:6.5108 train_time:3278ms step_avg:409.80ms
+step:9/500 train_loss:6.0809 train_time:3678ms step_avg:408.62ms
+step:10/500 train_loss:5.6284 train_time:4072ms step_avg:407.17ms
+step:100/500 val_loss:3.1408 val_bpb:1.8601 train_time:39382ms step_avg:393.82ms
+step:200/500 train_loss:2.7192 train_time:84252ms step_avg:421.26ms
+step:200/500 val_loss:2.7753 val_bpb:1.6437 train_time:84258ms step_avg:421.29ms
+step:300/500 val_loss:2.6143 val_bpb:1.5483 train_time:123677ms step_avg:412.26ms
+step:400/500 train_loss:2.3749 train_time:166802ms step_avg:417.01ms
+step:400/500 val_loss:2.5354 val_bpb:1.5016 train_time:166809ms step_avg:417.02ms
+step:500/500 val_loss:2.4777 val_bpb:1.4675 train_time:206042ms step_avg:412.08ms
+peak memory allocated: 12152 MiB reserved: 12368 MiB
+Serialized model: 67224578 bytes
+Code size: 47686 bytes
+Total submission size: 67272264 bytes
+Serialized model int8+zlib: 14200197 bytes (payload:17178912 raw_torch:17223564 payload_ratio:3.91x)
+Total submission size int8+zlib: 14247883 bytes
+/workspace/parameter-golf/train_gpt.py:1098: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  quant_state = torch.load(io.BytesIO(zlib.decompress(quant_blob_disk)), map_location="cpu")
+final_int8_zlib_roundtrip val_loss:2.4781 val_bpb:1.4676 eval_time:11316ms
+final_int8_zlib_roundtrip_exact val_loss:2.47805136 val_bpb:1.46764160
