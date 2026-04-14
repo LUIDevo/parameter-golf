@@ -610,12 +610,15 @@ class MLP(nn.Module):
         super().__init__()
         hidden = mlp_mult * dim
         self.fc = CastedLinear(dim, hidden, bias=False)
+        self.gate = CastedLinear(dim, hidden, bias=False)
         self.proj = CastedLinear(hidden, dim, bias=False)
         self.proj._zero_init = True
 
     def forward(self, x: Tensor) -> Tensor:
-        return self.proj(F.gelu(self.fc(x)))
+        # return self.proj(F.gelu(self.fc(x)))
         # x = torch.relu(self.fc(x))
+        activated=self.fc(x)
+        return self.proj(activated*F.silu(self.gate(x)))
         # return self.proj(x.square())
 
 
