@@ -506,13 +506,13 @@ class RMSNorm(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return F.rms_norm(x, (x.size(-1),), eps=self.eps)
 
+def fake_sym_quant(w, bits=8):
+    qmax=2**(bits-1)-1
+    scale=w.abs().amax().clamp_min(1e-8)/qmax
+    q=(w/scale).round().clamp(-qmax, qmax)*scale
+    return w+(q-w).detach()
 
 class CastedLinear(nn.Linear):
-    def fake_sym_quant(w, bits=8):
-        qmax=2**(bits-1)-1
-        scale=w.abs().amax().clamp_min(1e-8)/qmax
-        q=(w/scale).round().clamp(-qmax, qmax)*scale
-        return w+(q-w).detach()
     # Keep weights in fp32 for optimizer/state quality, cast at matmul time for bf16 compute.
     def forward(self, x: Tensor) -> Tensor:
         w=fake_sym_quant(self.weight) if self.training else self.weight
