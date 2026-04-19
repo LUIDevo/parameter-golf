@@ -625,10 +625,10 @@ class MLP(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         # return self.proj(F.gelu(self.fc(x)))
-        # x = torch.relu(self.fc(x))
-        activated=self.fc(x)
-        return self.proj(activated*F.silu(self.gate(x)))
-        # return self.proj(x.square())
+        # activated=self.fc(x)
+        # return self.proj(activated*F.silu(self.gate(x)))
+        x = torch.relu(self.fc(x))
+        return self.proj(x.square())
 
 
 class Block(nn.Module):
