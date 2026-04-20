@@ -308,6 +308,30 @@ INT8_PER_ROW_SCALE_DTYPE = torch.float16
 INT8_CLIP_PERCENTILE = 99.99984
 INT8_CLIP_Q = INT8_CLIP_PERCENTILE / 100.0
 
+def pack_int6(q):
+      u = (q + 32).to(torch.uint8)
+      flat = u.flatten()
+      pad = (-flat.numel()) % 4
+      if pad: flat = F.pad(flat, (0, pad))
+      groups = flat.view(-1, 4).to(torch.int32)
+      v0, v1, v2, v3 = groups[:,0], groups[:,1], groups[:,2], groups[:,3]
+      b0 = (v0 | (v1 << 6)) & 0xFF
+      b1 = ((v1 >> 2) | (v2 << 4)) & 0xFF
+      b2 = ((v2 >> 4) | (v3 << 2)) & 0xFF
+      return torch.stack((b0, b1, b2), dim=1).flatten().to(torch.uint8)
+
+def unpack_int6(packed, numel):
+      flat = packed.to(torch.int32)
+      groups=flat.view(-1,3)
+      b0,b1,b2=groups[:,0], groups[:,1], groups[:,2]
+      v0=b0 & 0x3F
+      v1=((b0 >>6) | (b1 <<2)) & 0x3F
+      v2=((b1 >>4) | (b2 <<4)) & 0x3F
+      v3=(b2>>2) & 0x3F
+      values=torch.stack((v0,v1,v2,v3), dim=1).flatten()
+      values=values[:numel]
+      return (values-32).to(torch.int8)
+
 def tensor_nbytes(t: Tensor) -> int:
     return int(t.numel()) * int(t.element_size())
 
@@ -330,14 +354,15 @@ def quantize_float_tensor(t: Tensor) -> tuple[Tensor, Tensor]:
             else torch.empty((t32.shape[0],), dtype=torch.float32)
         )
         clipped = torch.maximum(torch.minimum(t32, clip_abs[:, None]), -clip_abs[:, None])
-        scale = (clip_abs / 127.0).clamp_min(1.0 / 127.0)
-        q = torch.clamp(torch.round(clipped / scale[:, None]), -127, 127).to(torch.int8).contiguous()
-        return q, scale.to(dtype=INT8_PER_ROW_SCALE_DTYPE).contiguous()
+        scale = (clip_abs / 31.0).clamp_min(1.0 / 31.0)
+        q = torch.clamp(torch.round(clipped / scale[:, None]), -31, 31).to(torch.int8).contiguous()
+        packed=pack_int6(q)
+        return packed, scale.to(dtype=INT8_PER_ROW_SCALE_DTYPE).contiguous()
 
     # Vectors / scalars use a simpler per-tensor scale.
     clip_abs = float(torch.quantile(t32.abs().flatten(), INT8_CLIP_Q).item()) if t32.numel() else 0.0
-    scale = torch.tensor(clip_abs / 127.0 if clip_abs > 0 else 1.0, dtype=torch.float32)
-    q = torch.clamp(torch.round(torch.clamp(t32, -clip_abs, clip_abs) / scale), -127, 127).to(torch.int8).contiguous()
+    scale = torch.tensor(clip_abs / 31.0 if clip_abs > 0 else 1.0, dtype=torch.float32)
+    q = torch.clamp(torch.round(torch.clamp(t32, -clip_abs, clip_abs) / scale), -31, 31).to(torch.int8).contiguous()
     return q, scale
 
 def quantize_state_dict_int8(state_dict: dict[str, Tensor]):
@@ -380,14 +405,14 @@ def quantize_state_dict_int8(state_dict: dict[str, Tensor]):
         stats["num_float_tensors"] += 1
         q, s = quantize_float_tensor(t)
         if s.ndim > 0:
-            qmeta[name] = {"scheme": "per_row", "axis": 0}
+            qmeta[name] = {"scheme": "per_row", "axis": 0, "bits": 6, "orig_shape": list(t.shape),}
         quantized[name] = q
         scales[name] = s
         dtypes[name] = str(t.dtype).removeprefix("torch.")
         stats["int8_payload_bytes"] += tensor_nbytes(q) + tensor_nbytes(s)
 
     obj: dict[str, object] = {
-        "__quant_format__": "int8_clean_per_row_v1",
+        "__quant_format__": "int6_clean_per_row_v1",
         "quantized": quantized,
         "scales": scales,
         "dtypes": dtypes,
@@ -406,6 +431,12 @@ def dequantize_state_dict_int8(obj: dict[str, object]) -> dict[str, Tensor]:
     for name, q in obj["quantized"].items():
         dtype = getattr(torch, obj["dtypes"][name])
         s = obj["scales"][name]
+        meta = qmeta.get(name,{})
+        if meta.get("bits") == 6:
+            orig = meta["orig_shape"]
+            numel = 1
+            for d in orig: numel *= d
+            q = unpack_int6(q, numel).view(orig)
         if qmeta.get(name, {}).get("scheme") == "per_row" or s.ndim > 0:
             s = s.to(dtype=torch.float32)
             # Broadcast the saved row scale back across trailing dimensions.
@@ -507,16 +538,16 @@ class RMSNorm(nn.Module):
         return F.rms_norm(x, (x.size(-1),), eps=self.eps)
 
 
-def fake_sym_quant(w, bits=8):
+def fake_sym_quant(w, bits=6):
     qmax=2**(bits-1)-1
-    scale=w.abs().amax().clamp_min(1e-8)/qmax
+    scale=w.abs().amax().clamp_min(1e-6)/qmax
     q=(w/scale).round().clamp(-qmax, qmax)*scale
     return w+(q-w).detach()
 
 class CastedLinear(nn.Linear):
     # Keep weights in fp32 for optimizer/state quality, cast at matmul time for bf16 compute.
     def forward(self, x: Tensor) -> Tensor:
-        w=fake_sym_quant(self.weight) if self.training else self.weight
+        w=fake_sym_quant(self.weight, bits=6) if self.training else self.weight
         bias = self.bias.to(x.dtype) if self.bias is not None else None
         return F.linear(x, w.to(x.dtype), bias)
 
