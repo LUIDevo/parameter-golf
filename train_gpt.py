@@ -87,6 +87,32 @@ class Hyperparameters:
     grad_clip_norm = float(os.environ.get("GRAD_CLIP_NORM", 0.0))
     dev_mode = bool(int(os.environ.get("DEV_MODE", "0")))
 
+class EMA: 
+    def __init__(self,model,decay):
+        self.model=model
+        self.decay=decay
+        self.shadow={}
+        self.backup={}
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                self.shadow[name]=param.data.float().clone()
+    @torch.no_grad()
+    def update(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                self.shadow[name].mul_(self.decay).add_(param.data.float(), alpha=1.0-self.decay)
+    def apply_shadow(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                self.backup[name]=param.data.clone()
+                param.data.copy_(self.shadow[name])
+    def restore(self):
+        if not self.backup: return
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                param.data.copy_(self.backup[name])
+        self.backup={}
+
 # -----------------------------
 # MUON OPTIMIZER 
 # -----------------------------
@@ -864,7 +890,6 @@ def main() -> None:
     # -----------------------------
     # MODEL + OPTIMIZER SETUP
     # -----------------------------
-
     base_model = GPT(
         vocab_size=args.vocab_size,
         num_layers=args.num_layers,
@@ -885,6 +910,8 @@ def main() -> None:
     compiled_model = base_model if args.dev_mode else torch.compile(base_model, dynamic=False, fullgraph=True)
     model: nn.Module = DDP(compiled_model, device_ids=[local_rank], broadcast_buffers=False) if distributed else compiled_model
 
+    ema=EMA(base_model, decay=0.997)
+    ema_start_step=500
     # Optimizer split:
     # - token embedding (Adam) uses EMBED_LR
     # - untied lm_head (Adam) uses HEAD_LR
@@ -1017,6 +1044,7 @@ def main() -> None:
 
         should_validate = last_step or (args.val_loss_every > 0 and step % args.val_loss_every == 0)
         if should_validate:
+            ema.apply_shadow()
             torch.cuda.synchronize()
             training_time_ms += 1000.0 * (time.perf_counter() - t0)
             val_loss, val_bpb = eval_val(
@@ -1037,6 +1065,7 @@ def main() -> None:
             )
             torch.cuda.synchronize()
             t0 = time.perf_counter()
+            ema.restore()
 
         if last_step:
             if stop_after_step is not None and step < args.iterations:
@@ -1074,6 +1103,9 @@ def main() -> None:
         for opt in optimizers:
             opt.step()
         zero_grad_all()
+
+        if step%10==0 and step>=ema_start_step:
+            ema.update()
 
         step += 1
         approx_training_time_ms = training_time_ms + 1000.0 * (time.perf_counter() - t0)
