@@ -101,6 +101,11 @@ class EMA:
         for name, param in self.model.named_parameters():
             if param.requires_grad:
                 self.shadow[name].mul_(self.decay).add_(param.data.float(), alpha=1.0-self.decay)
+    @torch.no_grad()
+    def reset_to_current(self):
+        for name, param in self.model.named_parameters():
+            if name in self.shadow:
+                self.shadow[name].copy_(param.data.float())
     def apply_shadow(self):
         for name, param in self.model.named_parameters():
             if param.requires_grad:
@@ -910,8 +915,8 @@ def main() -> None:
     compiled_model = base_model if args.dev_mode else torch.compile(base_model, dynamic=False, fullgraph=True)
     model: nn.Module = DDP(compiled_model, device_ids=[local_rank], broadcast_buffers=False) if distributed else compiled_model
 
-    ema=EMA(base_model, decay=0.997)
-    ema_start_step=500
+    ema=EMA(base_model, decay=0.999)
+    ema_start_step=50
     # Optimizer split:
     # - token embedding (Adam) uses EMBED_LR
     # - untied lm_head (Adam) uses HEAD_LR
@@ -1044,7 +1049,8 @@ def main() -> None:
 
         should_validate = last_step or (args.val_loss_every > 0 and step % args.val_loss_every == 0)
         if should_validate:
-            ema.apply_shadow()
+            if step >= ema_start_step:
+                ema.apply_shadow()
             torch.cuda.synchronize()
             training_time_ms += 1000.0 * (time.perf_counter() - t0)
             val_loss, val_bpb = eval_val(
@@ -1065,7 +1071,8 @@ def main() -> None:
             )
             torch.cuda.synchronize()
             t0 = time.perf_counter()
-            ema.restore()
+            if step >= ema_start_step:
+                ema.restore()
 
         if last_step:
             if stop_after_step is not None and step < args.iterations:
@@ -1104,7 +1111,9 @@ def main() -> None:
             opt.step()
         zero_grad_all()
 
-        if step%10==0 and step>=ema_start_step:
+        if step == ema_start_step:
+            ema.reset_to_current()
+        if step >= ema_start_step:
             ema.update()
 
         step += 1
@@ -1139,6 +1148,7 @@ def main() -> None:
     # Save the raw state (useful for debugging/loading in PyTorch directly), then always produce
     # the compressed int8+zlib artifact and validate the round-tripped weights.
 
+    ema.apply_shadow()
     if master_process:
         torch.save(base_model.state_dict(), "final_model.pt")
         model_bytes = os.path.getsize("final_model.pt")
