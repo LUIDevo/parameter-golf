@@ -668,9 +668,9 @@ class CausalSelfAttention(nn.Module):
         q = apply_rotary_emb(q, cos, sin)
         k = apply_rotary_emb(k, cos, sin)
         q = q * self.q_gain.to(dtype=q.dtype)[None, :, None, None]
-        q=q.transpose(1,2).to(x.dtype)
-        k=k.transpose(1,2).to(x.dtype)
-        v=v.transpose(1,2).to(x.dtype)
+        q=q.transpose(1,2).bfloat16()
+        k=k.transpose(1,2).bfloat16()
+        v=v.transpose(1,2).bfloat16()
         y=flash_attn_func(q,k,v, causal=True, window_size=(self.window_size, 0))
         y=y.contiguous().reshape(bsz, seqlen, dim)
         # y = F.scaled_dot_product_attention(
