@@ -26,6 +26,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.nn.parallel import DistributedDataParallel as DDP
+from flash_attn import flash_attn_func
 
 # -----------------------------
 # HYPERPARAMETERS
@@ -86,6 +87,9 @@ class Hyperparameters:
     adam_eps = float(os.environ.get("ADAM_EPS", 1e-8))
     grad_clip_norm = float(os.environ.get("GRAD_CLIP_NORM", 0.0))
     dev_mode = bool(int(os.environ.get("DEV_MODE", "0")))
+
+    # SWA
+    swa_window = int(os.environ.get("SWA_WINDOW", -1))
 
 class EMA: 
     def __init__(self,model,decay):
@@ -630,6 +634,7 @@ class CausalSelfAttention(nn.Module):
         num_kv_heads: int,
         rope_base: float,
         qk_gain_init: float,
+        window_size: int=-1
     ):
         super().__init__()
         if dim % num_heads != 0:
@@ -649,6 +654,7 @@ class CausalSelfAttention(nn.Module):
         self.proj._zero_init = True
         self.q_gain = nn.Parameter(torch.full((num_heads,), qk_gain_init, dtype=torch.float32))
         self.rotary = Rotary(self.head_dim, base=rope_base)
+        self.window_size=window_size
 
     def forward(self, x: Tensor) -> Tensor:
         bsz, seqlen, dim = x.shape
@@ -661,15 +667,20 @@ class CausalSelfAttention(nn.Module):
         q = apply_rotary_emb(q, cos, sin)
         k = apply_rotary_emb(k, cos, sin)
         q = q * self.q_gain.to(dtype=q.dtype)[None, :, None, None]
-        y = F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            attn_mask=None,
-            is_causal=True,
-            enable_gqa=(self.num_kv_heads != self.num_heads),
-        )
-        y = y.transpose(1, 2).contiguous().reshape(bsz, seqlen, dim)
+        q=q.transpose(1,2)
+        k=k.transpose(1,2)
+        v=v.transpose(1,2)
+        y=flash_attn_func(q,k,v, causal=True, window_size=(self.window_size, 0))
+        y=y.contiguous().reshape(bsz, seqlen, dim)
+        # y = F.scaled_dot_product_attention(
+        #     q,
+        #     k,
+        #     v,
+        #     attn_mask=None,
+        #     is_causal=True,
+        #     enable_gqa=(self.num_kv_heads != self.num_heads),
+        # )
+        # y = y.transpose(1, 2).contiguous().reshape(bsz, seqlen, dim)
         return self.proj(y)
 
 
@@ -697,11 +708,12 @@ class Block(nn.Module):
         mlp_mult: int,
         rope_base: float,
         qk_gain_init: float,
+        window_size: int,
     ):
         super().__init__()
         self.attn_norm = RMSNorm()
         self.mlp_norm = RMSNorm()
-        self.attn = CausalSelfAttention(dim, num_heads, num_kv_heads, rope_base, qk_gain_init)
+        self.attn = CausalSelfAttention(dim, num_heads, num_kv_heads, rope_base, qk_gain_init, window_size)
         self.mlp = MLP(dim, mlp_mult)
         self.attn_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32))
         self.mlp_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32))
@@ -730,6 +742,7 @@ class GPT(nn.Module):
         logit_softcap: float,
         rope_base: float,
         qk_gain_init: float,
+        window_size: int,
     ):
         super().__init__()
         if logit_softcap <= 0.0:
@@ -751,6 +764,7 @@ class GPT(nn.Module):
                     mlp_mult,
                     rope_base,
                     qk_gain_init,
+                    window_size,
                 )
                 for i in range(num_layers)
             ]
@@ -907,6 +921,7 @@ def main() -> None:
         logit_softcap=args.logit_softcap,
         rope_base=args.rope_base,
         qk_gain_init=args.qk_gain_init,
+        window_size=args.swa_window,
     ).to(device).bfloat16()
     for module in base_model.modules():
         if isinstance(module, CastedLinear):
