@@ -573,7 +573,6 @@ class RMSNorm(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return F.rms_norm(x, (x.size(-1),), eps=self.eps)
 
-
 def fake_sym_quant(w, bits=6):
     qmax=2**(bits-1)-1
     if w.ndim == 2:
