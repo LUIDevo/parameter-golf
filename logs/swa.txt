@@ -1,0 +1,72 @@
+root@196db44c846a:/workspace/parameter-golf# RUN_ID=swa \
+>        DATA_PATH=./data/datasets/fineweb10B_sp1024/ \
+>        TOKENIZER_PATH=./data/tokenizers/fineweb_1024_bpe.model \
+>        ITERATIONS=1000 \
+>        WARMDOWN_ITERS=60 \
+>        VAL_LOSS_EVERY=250 \
+>        GRAD_CLIP_NORM=1.0 \
+>        SWA_WINDOW=512 \
+>        MAX_WALLCLOCK_SECONDS=0 \
+>        SEED=1337 \
+>        torchrun --standalone --nproc_per_node=1 train_gpt.py
+logs/swa.txt
+val_bpb:enabled tokenizer_kind=sentencepiece tokenizer_path=./data/tokenizers/fineweb_1024_bpe.model
+train_loader:dataset:fineweb10B_sp1024 train_shards:40
+val_loader:shards pattern=./data/datasets/fineweb10B_sp1024/fineweb_val_*.bin tokens:62021632
+model_params:17059912
+world_size:1 grad_accum_steps:8
+sdp_backends:cudnn=False flash=True mem_efficient=False math=False
+attention_mode:gqa num_heads:8 num_kv_heads:4
+tie_embeddings:True embed_lr:0.05 head_lr:0.0 matrix_lr:0.04 scalar_lr:0.04
+train_batch_tokens:524288 train_seq_len:1024 iterations:1000 warmup_steps:20 max_wallclock_seconds:0.000
+seed:1337
+^[5warmup_step:1/20
+warmup_step:2/20
+warmup_step:3/20
+warmup_step:4/20
+warmup_step:5/20
+warmup_step:6/20
+warmup_step:7/20
+warmup_step:8/20
+warmup_step:9/20
+warmup_step:10/20
+warmup_step:11/20
+warmup_step:12/20
+warmup_step:13/20
+warmup_step:14/20
+warmup_step:15/20
+warmup_step:16/20
+warmup_step:17/20
+warmup_step:18/20
+warmup_step:19/20
+warmup_step:20/20
+step:0/1000 val_loss:6.9357 val_bpb:4.1077 train_time:0ms step_avg:0.02ms
+step:1/1000 train_loss:6.9357 train_time:1414ms step_avg:1413.75ms
+step:2/1000 train_loss:16.7492 train_time:2798ms step_avg:1399.04ms
+step:3/1000 train_loss:10.3972 train_time:4184ms step_avg:1394.78ms
+step:4/1000 train_loss:7.0290 train_time:5569ms step_avg:1392.33ms
+step:5/1000 train_loss:6.5192 train_time:6965ms step_avg:1392.94ms
+step:6/1000 train_loss:6.4255 train_time:8365ms step_avg:1394.11ms
+step:7/1000 train_loss:6.1341 train_time:9764ms step_avg:1394.85ms
+step:8/1000 train_loss:6.0443 train_time:11162ms step_avg:1395.21ms
+step:9/1000 train_loss:5.9321 train_time:12561ms step_avg:1395.67ms
+step:10/1000 train_loss:5.7681 train_time:13966ms step_avg:1396.63ms
+step:200/1000 train_loss:2.7374 train_time:278279ms step_avg:1391.40ms
+step:250/1000 val_loss:3.6626 val_bpb:2.1692 train_time:347731ms step_avg:1390.92ms
+step:400/1000 train_loss:2.3807 train_time:556227ms step_avg:1390.57ms
+step:500/1000 val_loss:3.5228 val_bpb:2.0864 train_time:695042ms step_avg:1390.08ms
+step:600/1000 train_loss:2.4970 train_time:834407ms step_avg:1390.68ms
+step:750/1000 val_loss:3.3205 val_bpb:1.9666 train_time:1042281ms step_avg:1389.71ms
+step:800/1000 train_loss:2.3534 train_time:1112412ms step_avg:1390.51ms
+step:1000/1000 train_loss:2.3335 train_time:1390764ms step_avg:1390.76ms
+step:1000/1000 val_loss:3.1381 val_bpb:1.8585 train_time:1390772ms step_avg:1390.77ms
+peak memory allocated: 10761 MiB reserved: 10770 MiB
+Serialized model: 67224983 bytes
+Code size: 51266 bytes
+Total submission size: 67276249 bytes
+Serialized model int8+zlib: 9982616 bytes (payload:12919072 raw_torch:12965401 payload_ratio:5.20x)
+Total submission size int8+zlib: 10033882 bytes
+final_int8_zlib_roundtrip val_loss:3.1628 val_bpb:1.8732 eval_time:54350ms
+final_int8_zlib_roundtrip_exact val_loss:3.16282197 val_bpb:1.87320132
+(arg: 5) ^C
+root@196db44c846a:/workspace/parameter-golf#
