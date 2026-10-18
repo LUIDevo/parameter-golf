@@ -4,7 +4,7 @@
 <br>
 
 Paramater Golf - Louis Berenyi & Allbless Lema
-In this repository, we added stochastic weight averaging, quantization aware training, added int6 quantization with bitwise shifts and grouping, and estimated weight averaging. In this repository you can find our code changes and our logs that we created for our trial runs.
+In this repository, we added sliding window attention, quantization aware training, added int6 quantization with bitwise shifts and grouping, and estimated weight averaging. In this repository you can find our code changes and our logs that we created for our trial runs.
 
 **OpenAI Model Craft Challenge: Parameter Golf** is a challenge to train the best language model that fits in a 16MB artifact and trains in under 10 minutes on 8xH100s, evaluated by compression on the FineWeb validation set (tokenizer-agnostic, bits per byte).
 
