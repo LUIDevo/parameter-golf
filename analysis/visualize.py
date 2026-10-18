@@ -57,7 +57,7 @@ def plot_bpb_comparison(runs: list[RunResult], output: Path) -> None:
                 f"{bpb:.4f}", ha="center", va="bottom", fontsize=9)
 
     ax.set_ylabel("BPB (lower is better)")
-    ax.set_title("Final BPB Comparison (INT8 quantized)")
+    ax.set_title("Final BPB Comparison (quantized)")
     ax.tick_params(axis="x", rotation=45)
     fig.tight_layout()
     fig.savefig(output, dpi=150)
@@ -116,11 +116,11 @@ def plot_memory_and_size(runs: list[RunResult], output: Path) -> None:
     runs_with_size = [r for r in runs_with_data if r.submission_bytes is not None]
     if runs_with_size:
         labels2 = [r.run_id for r in runs_with_size]
-        sizes_mb = [r.submission_bytes / 1024 / 1024 for r in runs_with_size]
+        sizes_mb = [r.submission_bytes / 1_000_000 for r in runs_with_size]
         ax2.bar(labels2, sizes_mb, color="mediumseagreen", edgecolor="black", linewidth=0.5)
         ax2.axhline(y=16, color="red", linestyle="--", alpha=0.5, label="16MB cap")
         ax2.set_ylabel("Submission Size (MB)")
-        ax2.set_title("INT8+zlib Submission Size")
+        ax2.set_title("Quantized+zlib Submission Size")
         ax2.tick_params(axis="x", rotation=45)
         ax2.legend()
 

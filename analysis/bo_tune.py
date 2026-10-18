@@ -62,8 +62,8 @@ def run_trial_training(hparams: dict, iters: int, trial_id: int) -> float | None
 
     output = result.stdout + "\n" + result.stderr
 
-    # Parse the final int8 roundtrip val_bpb (most representative of submission quality)
-    match = re.search(r"final_int8_zlib_roundtrip_exact\s+val_loss:\S+\s+val_bpb:(\S+)", output)
+    # Parse the primary quantized score, not the optional EMA/sliding diagnostics.
+    match = re.search(r"(?:final_int8_zlib|final_quantized)_roundtrip_exact\s+val_loss:\S+\s+val_bpb:(\S+)", output)
     if match:
         return float(match.group(1))
 

@@ -41,6 +41,13 @@ class RunResult:
     train_shards: int | None = None
     world_size: int | None = None
     grad_accum_steps: int | None = None
+    quant_bits: int | None = None
+    qat_enabled: bool | None = None
+    ema_enabled: bool | None = None
+    attention_window: int | None = None
+    eval_stride: int | None = None
+    git_commit: str | None = None
+    source_sha256: str | None = None
 
     # Per-step metrics
     steps: list[StepRecord] = field(default_factory=list)
@@ -55,7 +62,9 @@ class RunResult:
     int8_bytes: int | None = None
     submission_bytes: int | None = None
     int8_val_loss: float | None = None
-    int8_val_bpb: float | None = None
+    int8_val_bpb: float | None = None  # Legacy field name; contains the primary quantized score.
+    diagnostics: dict[str, dict[str, float]] = field(default_factory=dict)
+    sliding_val_bpb: float | None = None
 
 
 STEP_RE = re.compile(
@@ -106,6 +115,22 @@ def parse_log(path: Path) -> RunResult:
         if m := re.search(r"^seed:(\d+)$", line):
             result.seed = int(m.group(1))
 
+        if m := re.search(r"^git_commit:(\S+)\s+source_sha256:(\S+)", line):
+            result.git_commit, result.source_sha256 = m.groups()
+        if line.startswith("experiment:"):
+            for attr in ("quant_bits", "attention_window", "eval_stride"):
+                if m := re.search(rf"{attr}:(-?\d+)", line):
+                    setattr(result, attr, int(m.group(1)))
+            for attr in ("qat_enabled", "ema_enabled"):
+                if m := re.search(rf"{attr}:(True|False)", line):
+                    setattr(result, attr, m.group(1) == "True")
+        if m := re.search(r"^diagnostic weights:(raw|ema) stage:(float|quantized) "
+                          r"val_loss:([\d.]+) val_bpb:([\d.]+)", line):
+            result.diagnostics[f"{m[1]}_{m[2]}"] = {"val_loss": float(m[3]), "val_bpb": float(m[4])}
+        if m := re.search(r"^final_sliding_window weights:raw eval_stride:\d+ "
+                          r"val_loss:[\d.]+ val_bpb:([\d.]+)", line):
+            result.sliding_val_bpb = float(m[1])
+
         # Step records
         if m := STEP_RE.search(line):
             rec = StepRecord(
@@ -127,13 +152,13 @@ def parse_log(path: Path) -> RunResult:
         # Serialization
         if m := re.search(r"^Serialized model:\s*(\d+)\s*bytes", line):
             result.model_bytes = int(m.group(1))
-        if m := re.search(r"^Serialized model int8\+zlib:\s*(\d+)\s*bytes", line):
+        if m := re.search(r"^Serialized model (?:int8|quantized)\+zlib:\s*(\d+)\s*bytes", line):
             result.int8_bytes = int(m.group(1))
-        if m := re.search(r"^Total submission size int8\+zlib:\s*(\d+)\s*bytes", line):
+        if m := re.search(r"^Total submission size (?:int8|quantized)\+zlib:\s*(\d+)\s*bytes", line):
             result.submission_bytes = int(m.group(1))
 
-        # Final int8 roundtrip
-        if m := re.search(r"final_int8_zlib_roundtrip_exact\s+val_loss:([\d.]+)\s+val_bpb:([\d.]+)", line):
+        # Primary raw-weight roundtrip only; do not replace it with EMA/sliding diagnostics.
+        if m := re.search(r"^(?:final_int8_zlib|final_quantized)_roundtrip_exact\s+val_loss:([\d.]+)\s+val_bpb:([\d.]+)", line):
             result.int8_val_loss = float(m.group(1))
             result.int8_val_bpb = float(m.group(2))
 

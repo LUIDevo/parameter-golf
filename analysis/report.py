@@ -123,7 +123,7 @@ def _make_memory_chart(runs: list[RunResult]) -> str | None:
     ax1.tick_params(axis="x", rotation=45, labelsize=8)
     ax1.legend(fontsize=7)
     ax1.grid(True, alpha=0.2, axis="y")
-    sized = [(d[0], d[2] / 1024 / 1024) for d in data if d[2]]
+    sized = [(d[0], d[2] / 1_000_000) for d in data if d[2]]
     if sized:
         ax2.bar([s[0] for s in sized], [s[1] for s in sized],
                 color=NEON_GREEN, edgecolor=BORDER, linewidth=0.5, alpha=0.85)
@@ -144,7 +144,7 @@ def _fmt(val, kind="str") -> str:
     if kind == "int":
         return f"{val:,}"
     if kind == "mb":
-        return f"{val / 1024 / 1024:.1f}"
+        return f"{val / 1_000_000:.1f}"
     if kind == "time":
         if val < 60_000:
             return f"{val / 1000:.1f}s"
@@ -474,6 +474,12 @@ def generate_report(runs: list[RunResult], output: Path) -> None:
         else:
             headroom_html = ""
 
+        diagnostic_rows = "".join(
+            f"<tr><td>{label} BPB</td><td>{metrics['val_bpb']:.4f}</td></tr>"
+            for label, metrics in r.diagnostics.items()
+        )
+        if r.sliding_val_bpb is not None:
+            diagnostic_rows += f"<tr><td>Additional sliding BPB</td><td>{r.sliding_val_bpb:.4f}</td></tr>"
         details += f"""
         <div class="run-detail" id="detail-{r.run_id}" style="border-left: 3px solid {color}">
             <h3><span class="run-dot" style="background:{color}"></span>{r.run_id}</h3>
@@ -487,7 +493,8 @@ def generate_report(runs: list[RunResult], output: Path) -> None:
                     <h4>Results</h4>
                     <table class="detail-table"><tbody>
                         <tr><td>Final BPB</td><td>{_fmt(r.final_val_bpb, 'bpb')}</td></tr>
-                        <tr><td>INT8 BPB</td><td>{_fmt(r.int8_val_bpb, 'bpb')}</td></tr>
+                        <tr><td>Quantized BPB</td><td>{_fmt(r.int8_val_bpb, 'bpb')}</td></tr>
+                        {diagnostic_rows}
                         <tr><td>Val Loss</td><td>{_fmt(r.final_val_loss, 'bpb')}</td></tr>
                         <tr><td>Train Time</td><td>{_fmt(r.final_train_time_ms, 'time')}</td></tr>
                         <tr><td>Peak VRAM</td><td>{_fmt(r.peak_memory_mib, 'int')} MiB</td></tr>

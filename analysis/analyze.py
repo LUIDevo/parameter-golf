@@ -45,7 +45,7 @@ def fmt_int(val: int | None) -> str:
 
 
 def fmt_mb(val: int | None) -> str:
-    return f"{val / 1024 / 1024:.1f}MB" if val is not None else "—"
+    return f"{val / 1_000_000:.1f}MB" if val is not None else "—"
 
 
 def fmt_time(ms: float | None) -> str:
@@ -422,7 +422,7 @@ def cmd_compare(runs: list[RunResult], id1: str, id2: str) -> None:
 
     fields = [
         ("Final BPB", "final_val_bpb", fmt_bpb),
-        ("INT8 BPB", "int8_val_bpb", fmt_bpb),
+        ("Quantized BPB", "int8_val_bpb", fmt_bpb),
         ("Final Val Loss", "final_val_loss", fmt_bpb),
         ("Model Params", "model_params", fmt_int),
         ("Submission Size", "submission_bytes", fmt_mb),
@@ -476,7 +476,8 @@ def cmd_detail(runs: list[RunResult], run_id: str) -> None:
     for attr in ["model_params", "num_heads", "num_kv_heads", "train_batch_tokens",
                  "train_seq_len", "iterations", "warmup_steps", "max_wallclock_seconds",
                  "embed_lr", "head_lr", "matrix_lr", "scalar_lr", "tie_embeddings",
-                 "train_shards", "world_size", "grad_accum_steps", "seed"]:
+                 "train_shards", "world_size", "grad_accum_steps", "seed", "quant_bits",
+                 "qat_enabled", "ema_enabled", "attention_window", "eval_stride", "git_commit", "source_sha256"]:
         val = getattr(run, attr, None)
         if val is not None:
             print(f"  {attr}: {val}")
@@ -484,12 +485,17 @@ def cmd_detail(runs: list[RunResult], run_id: str) -> None:
     print()
     print("── Results ──")
     print(f"  Final BPB:        {fmt_bpb(run.final_val_bpb)}")
-    print(f"  INT8 BPB:         {fmt_bpb(run.int8_val_bpb)}")
+    print(f"  Quantized BPB:    {fmt_bpb(run.int8_val_bpb)}")
     print(f"  Final Val Loss:   {fmt_bpb(run.final_val_loss)}")
     print(f"  Train Time:       {fmt_time(run.final_train_time_ms)}")
     print(f"  Peak VRAM:        {fmt_int(run.peak_memory_mib)} MiB")
     print(f"  Model Size:       {fmt_mb(run.model_bytes)}")
     print(f"  Submission Size:  {fmt_mb(run.submission_bytes)}")
+
+    for label, metrics in run.diagnostics.items():
+        print(f"  {label:<17} BPB:{metrics['val_bpb']:.8f} loss:{metrics['val_loss']:.8f}")
+    if run.sliding_val_bpb is not None:
+        print(f"  Sliding BPB:      {run.sliding_val_bpb:.8f} (additional evaluation)")
 
     if run.steps:
         print()

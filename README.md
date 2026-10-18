@@ -74,6 +74,13 @@ We'd love to see weird & creative ideas in the challenge, since you never know w
 - [ ] State-space models, E2E TTT, super long context for evaluation or training 
 - [ ] Learning adapters on random linear maps
 
+## Local 1,000-step experiments
+
+The root CUDA trainer now defaults to 1,000 steps with a 100-step cooldown, full causal attention,
+matched int6 QAT/export, and FP16 embeddings. EMA is disabled by default. See
+[EXPERIMENTS.md](EXPERIMENTS.md) for matched controls, EMA diagnostics, optional sliding-window
+evaluation, and regression tests. These defaults differ from the upstream examples below.
+
 ## Getting Started
 
 ### Training Your First Model (Mac with Apple Silicon)
@@ -155,9 +162,9 @@ VOCAB_SIZE=1024 \
 torchrun --standalone --nproc_per_node=1 train_gpt.py
 ```
 
-By default, `train_gpt.py` keeps its ~10 minute wallclock cap. If you want a longer run, override it explicitly, for example `MAX_WALLCLOCK_SECONDS=0`.
+The local `train_gpt.py` defaults to 1,000 steps with a 100-step cooldown and no wallclock cutoff. Set `MAX_WALLCLOCK_SECONDS=600` if you also want a ten-minute training guard. This fixed-step experiment is not a reproduction of the upstream ten-minute 8×H100 benchmark.
 
-By default, this command prints `train_loss` step logs during training and prints `val_loss`, `val_bpb`, and compressed model size in the final `final_int8_zlib_roundtrip` lines at the end. If you want periodic validation logs during the run, set `VAL_LOSS_EVERY`, for example `VAL_LOSS_EVERY=200`. For the baseline config, the final `val_bpb` should land around ~1.2 with a compressed model size under 16MB.
+The command prints training loss and validates every 250 steps by default. The primary exported score is logged as `final_quantized_roundtrip_exact`. See [EXPERIMENTS.md](EXPERIMENTS.md) for matched int8/int6 controls, EMA diagnostics, artifact names, and optional overlapping-window evaluation. A quality improvement must be measured on the target hardware; it is not guaranteed by these fixes.
 
 For dataset export, tokenizer export, and docs-cache rebuild instructions, see [data/README.md](data/README.md).
 
